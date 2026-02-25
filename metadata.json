@@ -1,0 +1,8 @@
+{
+  "name": "Operator Arrival Checker",
+  "description": "An application to determine if an operator arrived early based on a scheduled time.",
+  "requestFramePermissions": [
+    "camera",
+    "geolocation"
+  ]
+}
