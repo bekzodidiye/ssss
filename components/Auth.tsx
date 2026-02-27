@@ -19,6 +19,28 @@ const Auth: React.FC<AuthProps> = ({ state, setState }) => {
   });
   const [error, setError] = useState('');
 
+  const formatPhoneNumber = (value: string) => {
+    if (!value) return value;
+    const phoneNumber = value.replace(/[^\d]/g, '');
+    const phoneNumberLength = phoneNumber.length;
+    if (phoneNumberLength < 4) return `+${phoneNumber}`;
+    if (phoneNumberLength < 6) {
+      return `+${phoneNumber.slice(0, 3)} ${phoneNumber.slice(3)}`;
+    }
+    if (phoneNumberLength < 9) {
+      return `+${phoneNumber.slice(0, 3)} ${phoneNumber.slice(3, 5)} ${phoneNumber.slice(5)}`;
+    }
+    if (phoneNumberLength < 11) {
+      return `+${phoneNumber.slice(0, 3)} ${phoneNumber.slice(3, 5)} ${phoneNumber.slice(5, 8)} ${phoneNumber.slice(8)}`;
+    }
+    return `+${phoneNumber.slice(0, 3)} ${phoneNumber.slice(3, 5)} ${phoneNumber.slice(5, 8)} ${phoneNumber.slice(8, 10)} ${phoneNumber.slice(10, 12)}`;
+  };
+
+  const handlePhoneChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const formattedValue = formatPhoneNumber(e.target.value);
+    setAuthForm({ ...authForm, phone: formattedValue });
+  };
+
   const handleAuth = (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
@@ -107,7 +129,7 @@ const Auth: React.FC<AuthProps> = ({ state, setState }) => {
                 required
                 className="w-full pl-10 pr-4 py-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none transition"
                 value={authForm.phone}
-                onChange={e => setAuthForm({ ...authForm, phone: e.target.value })}
+                onChange={handlePhoneChange}
               />
             </div>
 

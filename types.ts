@@ -20,10 +20,14 @@ export interface User {
 }
 
 export interface CheckIn {
+  id?: string;
   userId: string;
   timestamp: string;
   location: { lat: number; lng: number };
   photo: string;
+  checkOutTime?: string;
+  date?: string;
+  workingHours?: string;
 }
 
 export interface SimSale {
@@ -49,6 +53,7 @@ export interface Message {
   id: string;
   senderId: string;
   senderName: string;
+  recipientId?: string; // 'all' or specific userId
   text: string;
   timestamp: string;
   isRead: boolean;

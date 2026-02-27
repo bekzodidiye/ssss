@@ -5,6 +5,7 @@ import {
   Users, TrendingUp, Search, MapPin, Activity, 
   Phone, X, Clock, 
   ChevronRight, Smartphone, ExternalLink,
+  ChevronDown,
   CheckCircle, FileText, UserPlus, Award, BarChart2,
   ArrowLeft, CalendarDays,
   Plus,
@@ -20,17 +21,22 @@ import {
   Calendar,
   Maximize2,
   Quote,
-  LayoutGrid
+  LayoutGrid,
+  Edit,
+  Check,
+  Send
 } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine } from 'recharts';
 import L from 'leaflet';
-import { getTodayStr } from '../utils';
+import { getTodayStr, isDateMatch, getLatenessStatus, getEarlyDepartureStatus, getUzTime } from '../utils';
 
 interface ManagerPanelProps {
   state: AppState;
   approveUser: (userId: string) => void;
   updateUser: (userId: string, updates: Partial<User>) => void;
-  addMessage: (text: string) => void;
+  updateCheckIn: (userId: string, date: string, updates: Partial<CheckIn>) => void;
+  updateReport: (userId: string, date: string, updates: Partial<DailyReport>) => void;
+  addMessage: (text: string, recipientId?: string) => void;
   markMessageAsRead: (messageId: string) => void;
   activeTab: 'overview' | 'users' | 'reports' | 'approvals' | 'messages' | 'simcards';
   setActiveTab: (tab: 'overview' | 'users' | 'reports' | 'approvals' | 'messages' | 'simcards') => void;
@@ -38,118 +44,13 @@ interface ManagerPanelProps {
   setMonthlyTarget: (month: string, targets: Record<string, number>, officeCounts?: Record<string, number>, mobileOfficeCounts?: Record<string, number>) => void;
 }
 
-const isDateMatch = (timestamp: string, dateStr: string) => {
-  if (!timestamp) return false;
-  const d = new Date(timestamp);
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, '0');
-  const day = String(d.getDate()).padStart(2, '0');
-  return `${y}-${m}-${day}` === dateStr;
-};
 
 const getFormattedDateStr = (d: Date) => {
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, '0');
-  const day = String(d.getDate()).padStart(2, '0');
+  const uzDate = getUzTime(d);
+  const y = uzDate.getFullYear();
+  const m = String(uzDate.getMonth() + 1).padStart(2, '0');
+  const day = String(uzDate.getDate()).padStart(2, '0');
   return `${y}-${m}-${day}`;
-};
-
-const getLatenessStatus = (checkInTimestamp: string, workingHours?: string) => {
-  if (!workingHours || !workingHours.includes('-')) return null;
-  
-  try {
-    const startTimePart = workingHours.split('-')[0].trim();
-    const timeMatch = startTimePart.match(/(\d{1,2})[:.](\d{2})/);
-    
-    if (!timeMatch) return null;
-    
-    const startH = parseInt(timeMatch[1], 10);
-    const startM = parseInt(timeMatch[2], 10);
-    
-    const checkInDate = new Date(checkInTimestamp);
-    if (isNaN(checkInDate.getTime())) return null;
-
-    const startTotalMinutes = startH * 60 + startM;
-    const checkInTotalMinutes = checkInDate.getHours() * 60 + checkInDate.getMinutes();
-
-    if (checkInTotalMinutes > startTotalMinutes) {
-      const diff = checkInTotalMinutes - startTotalMinutes;
-      const hours = Math.floor(diff / 60);
-      const mins = diff % 60;
-      
-      let durationStr = "";
-      if (hours > 0) durationStr += `${hours} soat `;
-      durationStr += `${mins} daqiqa`;
-      
-      return {
-        isLate: true,
-        isEarly: false,
-        durationStr: durationStr.trim(),
-        diffMinutes: diff
-      };
-    } else if (checkInTotalMinutes < startTotalMinutes) {
-      const diff = startTotalMinutes - checkInTotalMinutes;
-      const hours = Math.floor(diff / 60);
-      const mins = diff % 60;
-      
-      let durationStr = "";
-      if (hours > 0) durationStr += `${hours} soat `;
-      durationStr += `${mins} daqiqa`;
-
-      return {
-        isLate: false,
-        isEarly: true,
-        durationStr: durationStr.trim(),
-        diffMinutes: diff
-      };
-    }
-  } catch (e) {
-    return null;
-  }
-  return null;
-};
-
-const getEarlyDepartureStatus = (checkOutTimestamp: string, workingHours?: string) => {
-  if (!workingHours || !workingHours.includes('-')) return null;
-
-  try {
-    const parts = workingHours.split('-');
-    if (parts.length < 2) return null;
-    
-    const endTimePart = parts[1].trim();
-    const timeMatch = endTimePart.match(/(\d{1,2})[:.](\d{2})/);
-
-    if (!timeMatch) return null;
-
-    const endH = parseInt(timeMatch[1], 10);
-    const endM = parseInt(timeMatch[2], 10);
-
-    const checkOutDate = new Date(checkOutTimestamp);
-    if (isNaN(checkOutDate.getTime())) return null;
-
-    const endTotalMinutes = endH * 60 + endM;
-    const checkOutTotalMinutes = checkOutDate.getHours() * 60 + checkOutDate.getMinutes();
-
-    // If checkout is BEFORE end time
-    if (checkOutTotalMinutes < endTotalMinutes) {
-      const diff = endTotalMinutes - checkOutTotalMinutes;
-      const hours = Math.floor(diff / 60);
-      const mins = diff % 60;
-
-      let durationStr = "";
-      if (hours > 0) durationStr += `${hours} soat `;
-      durationStr += `${mins} daqiqa`;
-
-      return {
-        isEarly: true,
-        durationStr: durationStr.trim(),
-        diffMinutes: diff
-      };
-    }
-  } catch (e) {
-    return null;
-  }
-  return null;
 };
 
 const SingleLocationMap: React.FC<{ location: { lat: number; lng: number } | null, initials: string }> = ({ location, initials }) => {
@@ -415,9 +316,11 @@ const StaffMap: React.FC<{ checkIns: CheckIn[], reports: DailyReport[], users: U
   );
 };
 
-const ManagerPanel: React.FC<ManagerPanelProps> = ({ state, approveUser, updateUser, addMessage, markMessageAsRead, activeTab, setActiveTab, addSimInventory, setMonthlyTarget }) => {
+const ManagerPanel: React.FC<ManagerPanelProps> = ({ state, approveUser, updateUser, updateCheckIn, updateReport, addMessage, markMessageAsRead, activeTab, setActiveTab, addSimInventory, setMonthlyTarget }) => {
   const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
   const [selectedDay, setSelectedDay] = useState<string | null>(null);
+  const [editingTime, setEditingTime] = useState<{ type: 'checkIn' | 'checkOut', current: string } | null>(null);
+  const [newTime, setNewTime] = useState('');
   const [isTimeDropdownOpen, setIsTimeDropdownOpen] = useState(false);
   const [tempStartTime, setTempStartTime] = useState('');
   const [tempEndTime, setTempEndTime] = useState('');
@@ -429,6 +332,10 @@ const ManagerPanel: React.FC<ManagerPanelProps> = ({ state, approveUser, updateU
   const [viewingPhoto, setViewingPhoto] = useState<string | null>(null);
   const [replyText, setReplyText] = useState('');
   const [isReplyingTo, setIsReplyingTo] = useState<string | null>(null);
+  const [isSendMessageModalOpen, setIsSendMessageModalOpen] = useState(false);
+  const [isRecipientDropdownOpen, setIsRecipientDropdownOpen] = useState(false);
+  const [messageRecipientId, setMessageRecipientId] = useState<string>('all');
+  const [messageText, setMessageText] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 5;
   
@@ -569,9 +476,145 @@ const ManagerPanel: React.FC<ManagerPanelProps> = ({ state, approveUser, updateU
     setSelectedYear(new Date().getFullYear());
   }, [chartTimeframe, selectedUserId]);
 
+  const periodTotals = useMemo(() => {
+    if (!selectedUserId) return { 'Ucell': 0, 'Mobiuz': 0, 'Beeline': 0, 'Uztelecom': 0 };
+    
+    let filteredSales = state.sales.filter(s => s.userId === selectedUserId);
+
+    if (chartTimeframe === 'week') {
+      const d = new Date();
+      const currentDayIndex = d.getDay();
+      const diffToMonday = (currentDayIndex === 0 ? -6 : 1 - currentDayIndex);
+      const targetMonday = new Date(d.getFullYear(), d.getMonth(), d.getDate() + diffToMonday + (weekOffset * 7));
+      targetMonday.setHours(0,0,0,0);
+      const targetSunday = new Date(targetMonday);
+      targetSunday.setDate(targetMonday.getDate() + 6);
+      targetSunday.setHours(23,59,59,999);
+      
+      filteredSales = filteredSales.filter(s => {
+        const sd = new Date(s.date);
+        return sd >= targetMonday && sd <= targetSunday;
+      });
+    } else if (chartTimeframe === 'month') {
+      const d = new Date();
+      d.setDate(1);
+      d.setMonth(d.getMonth() + monthOffset);
+      const year = d.getFullYear();
+      const month = d.getMonth();
+      const monthPrefix = `${year}-${String(month + 1).padStart(2, '0')}`;
+      filteredSales = filteredSales.filter(s => s.date.startsWith(monthPrefix));
+    } else if (chartTimeframe === 'year') {
+      const yearPrefix = selectedYear.toString();
+      filteredSales = filteredSales.filter(s => s.date.startsWith(yearPrefix));
+    }
+
+    const totals: Record<string, number> = { 'Ucell': 0, 'Mobiuz': 0, 'Beeline': 0, 'Uztelecom': 0 };
+    filteredSales.forEach(s => {
+      if (totals[s.company] !== undefined) {
+        totals[s.company] += s.count + s.bonus;
+      }
+    });
+    return totals;
+  }, [selectedUserId, chartTimeframe, weekOffset, monthOffset, selectedYear, state.sales]);
+
   return (
     <div className="space-y-6">
       {viewingPhoto && <PhotoViewer photo={viewingPhoto} onClose={() => setViewingPhoto(null)} />}
+      
+      {isSendMessageModalOpen && (
+        <div className="fixed inset-0 z-[150] flex items-center justify-center p-4 animate-in fade-in duration-300">
+          <div className="absolute inset-0 bg-gray-900/60 backdrop-blur-md" onClick={() => setIsSendMessageModalOpen(false)}></div>
+          <div className="bg-white w-full max-w-lg rounded-[2.5rem] shadow-2xl relative z-10 overflow-hidden animate-in zoom-in-95 duration-300">
+            <div className="p-8 border-b border-gray-100 flex items-center justify-between bg-gradient-to-br from-blue-50 to-indigo-50/30">
+              <div className="flex items-center gap-3">
+                <div className="p-3 bg-blue-600 text-white rounded-2xl shadow-lg shadow-blue-100">
+                  <Send className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-xl font-black text-gray-800 tracking-tight">Xabar yuborish</h3>
+                  <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mt-0.5">Yangi xabar yaratish</p>
+                </div>
+              </div>
+              <button onClick={() => setIsSendMessageModalOpen(false)} className="p-2 bg-white rounded-xl text-gray-400 hover:text-gray-900 transition shadow-sm border border-gray-100">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            
+            <div className="p-8 space-y-6">
+              <div className="relative">
+                <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest block mb-2 ml-1">Qabul qiluvchi</label>
+                <div 
+                  onClick={() => setIsRecipientDropdownOpen(!isRecipientDropdownOpen)}
+                  className="w-full p-4 bg-gray-50 border border-gray-100 rounded-2xl text-sm font-bold text-gray-800 focus:ring-2 focus:ring-blue-500 outline-none transition shadow-inner flex items-center justify-between cursor-pointer"
+                >
+                  <span>
+                    {messageRecipientId === 'all' 
+                      ? 'Barchaga (Hamma xodimlar)' 
+                      : operators.find(op => op.id === messageRecipientId)?.firstName + ' ' + operators.find(op => op.id === messageRecipientId)?.lastName}
+                  </span>
+                  <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform ${isRecipientDropdownOpen ? 'rotate-180' : ''}`} />
+                </div>
+                
+                {isRecipientDropdownOpen && (
+                  <div className="absolute top-full left-0 right-0 mt-2 bg-white border border-gray-100 rounded-2xl shadow-2xl z-[160] overflow-hidden animate-in slide-in-from-top-2 duration-200">
+                    <div className="max-h-60 overflow-y-auto no-scrollbar">
+                      <div 
+                        onClick={() => {
+                          setMessageRecipientId('all');
+                          setIsRecipientDropdownOpen(false);
+                        }}
+                        className={`p-4 text-sm font-bold cursor-pointer transition-colors ${messageRecipientId === 'all' ? 'bg-blue-50 text-blue-600' : 'text-gray-700 hover:bg-gray-50'}`}
+                      >
+                        Barchaga (Hamma xodimlar)
+                      </div>
+                      {operators.map(op => (
+                        <div 
+                          key={op.id}
+                          onClick={() => {
+                            setMessageRecipientId(op.id);
+                            setIsRecipientDropdownOpen(false);
+                          }}
+                          className={`p-4 text-sm font-bold cursor-pointer transition-colors border-t border-gray-50 ${messageRecipientId === op.id ? 'bg-blue-50 text-blue-600' : 'text-gray-700 hover:bg-gray-50'}`}
+                        >
+                          <div className="flex items-center justify-between">
+                            <span>{op.firstName} {op.lastName}</span>
+                            <span className="text-[8px] font-black uppercase tracking-widest text-gray-400">{op.role.replace('_', ' ')}</span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+              
+              <div>
+                <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest block mb-2 ml-1">Xabar matni</label>
+                <textarea 
+                  className="w-full p-6 bg-gray-50 border border-gray-100 rounded-[2rem] text-sm font-medium text-gray-800 focus:ring-2 focus:ring-blue-500 outline-none transition shadow-inner"
+                  rows={4}
+                  placeholder="Xabaringizni yozing..."
+                  value={messageText}
+                  onChange={(e) => setMessageText(e.target.value)}
+                  autoFocus
+                />
+              </div>
+              
+              <button 
+                onClick={() => {
+                  if (!messageText.trim()) return alert("Xabar matnini kiriting");
+                  addMessage(messageText, messageRecipientId);
+                  setIsSendMessageModalOpen(false);
+                  setMessageText('');
+                  alert("Xabar muvaffaqiyatli yuborildi!");
+                }}
+                className="w-full py-5 bg-blue-600 text-white rounded-[2rem] font-black uppercase tracking-widest text-[10px] shadow-xl shadow-blue-100 hover:bg-blue-700 active:scale-95 transition-all flex items-center justify-center gap-3"
+              >
+                Xabarni yuborish <Send className="w-4 h-4" />
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
       
       {activeTab === 'overview' && (
         <div className="space-y-8 animate-in fade-in duration-500">
@@ -608,12 +651,13 @@ const ManagerPanel: React.FC<ManagerPanelProps> = ({ state, approveUser, updateU
                     const todayCount = getUserSalesCount(op.id, 'today');
                     const monthCount = getUserSalesCount(op.id, 'month');
                     const todayCheckIn = state.checkIns.find(ci => ci.userId === op.id && isDateMatch(ci.timestamp, today));
-                    const lateness = todayCheckIn ? getLatenessStatus(todayCheckIn.timestamp, op.workingHours) : null;
+                    const workingHours = todayCheckIn?.workingHours || op.workingHours;
+                    const lateness = todayCheckIn ? getLatenessStatus(todayCheckIn.timestamp, workingHours) : null;
                     
                     return (
                       <tr 
                         key={op.id} 
-                        className={`transition group cursor-pointer ${lateness ? 'bg-red-50/50 hover:bg-red-100/50' : 'hover:bg-blue-50/30'}`}
+                        className={`transition group cursor-pointer ${lateness?.isLate ? 'bg-red-50/50 hover:bg-red-100/50' : (lateness?.isEarly ? 'bg-blue-50/50 hover:bg-blue-100/50' : 'hover:bg-blue-50/30')}`}
                         onClick={() => {
                           setSelectedUserId(op.id);
                           setSelectedDay(null); // Defaults to today
@@ -632,7 +676,7 @@ const ManagerPanel: React.FC<ManagerPanelProps> = ({ state, approveUser, updateU
                         </td>
                         <td className="px-8 py-5">
                           <div className="flex items-center gap-3">
-                            <div className={`w-9 h-9 rounded-xl flex items-center justify-center font-black text-xs border ${lateness ? 'bg-red-600 text-white border-red-700 shadow-sm' : 'bg-gradient-to-br from-indigo-50 to-blue-50 text-blue-600 border-blue-100/50'} overflow-hidden`}>
+                            <div className={`w-9 h-9 rounded-xl flex items-center justify-center font-black text-xs border ${lateness?.isLate ? 'bg-red-600 text-white border-red-700 shadow-sm' : (lateness?.isEarly ? 'bg-blue-600 text-white border-blue-700 shadow-sm' : 'bg-gradient-to-br from-indigo-50 to-blue-50 text-blue-600 border-blue-100/50')} overflow-hidden`}>
                               {op.photo ? (
                                 <img src={op.photo} alt={op.firstName} className="w-full h-full object-cover" />
                               ) : (
@@ -853,11 +897,9 @@ const ManagerPanel: React.FC<ManagerPanelProps> = ({ state, approveUser, updateU
                     </div>
                     <button 
                       onClick={() => {
-                        const text = prompt(`${selectedUser.firstName}ga xabar yuboring:`);
-                        if (text) {
-                          addMessage(`MENEJERDAN: ${text}`);
-                          alert("Xabar yuborildi!");
-                        }
+                        setMessageRecipientId(selectedUser.id);
+                        setIsSendMessageModalOpen(true);
+                        setMessageText('');
                       }}
                       className="p-3 bg-blue-50 text-blue-600 rounded-2xl hover:bg-blue-600 hover:text-white transition-all shadow-sm flex items-center gap-2 text-[10px] font-black uppercase tracking-widest"
                     >
@@ -907,10 +949,28 @@ const ManagerPanel: React.FC<ManagerPanelProps> = ({ state, approveUser, updateU
                       <div className="bg-white rounded-[2rem] p-6 shadow-sm overflow-hidden border-none outline-none select-none no-outline-container">
                         <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-8 gap-4">
                           <div className="flex items-center gap-3">
-                            <h3 className="text-lg font-black text-gray-800 flex items-center gap-2">
-                              <BarChart2 className="w-5 h-5 text-blue-600" /> 
-                              Sotuvlar Dinamikasi ({chartTitleLabel})
-                            </h3>
+                            <div className="flex flex-col gap-1">
+                              <h3 className="text-lg font-black text-gray-800 flex items-center gap-2">
+                                <BarChart2 className="w-5 h-5 text-blue-600" /> 
+                                Sotuvlar Dinamikasi ({chartTitleLabel})
+                              </h3>
+                              <div className="flex flex-wrap gap-2 pl-7">
+                                {['Ucell', 'Mobiuz', 'Beeline', 'Uztelecom'].map(company => {
+                                  const count = periodTotals[company] || 0;
+                                  const styles: any = {
+                                    'Ucell': 'text-purple-600 bg-purple-50 border-purple-100',
+                                    'Mobiuz': 'text-red-600 bg-red-50 border-red-100',
+                                    'Beeline': 'text-yellow-600 bg-yellow-50 border-yellow-100',
+                                    'Uztelecom': 'text-blue-600 bg-blue-50 border-blue-100'
+                                  }[company];
+                                  return (
+                                    <span key={company} className={`text-[9px] font-black uppercase tracking-widest px-2 py-1 rounded-lg border ${styles}`}>
+                                      {company}: {count}
+                                    </span>
+                                  );
+                                })}
+                              </div>
+                            </div>
                             <div className="flex items-center gap-1 bg-gray-50 p-1 rounded-xl border border-gray-100 shadow-inner">
                               <button 
                                 onClick={() => {
@@ -1011,14 +1071,31 @@ const ManagerPanel: React.FC<ManagerPanelProps> = ({ state, approveUser, updateU
                           <div className="flex items-center gap-3 w-full md:w-auto">
                             <div className="p-2.5 bg-indigo-50 rounded-xl text-indigo-600"><Smartphone className="w-5 h-5" /></div>
                             <h3 className="text-lg font-black text-gray-800 tracking-tight">
-                              {selectedDay || today} Kunlik Sotuvlar
+                              {selectedDay ? (chartTimeframe === 'year' ? `${new Date(selectedDay).toLocaleDateString('uz-UZ', { month: 'long', year: 'numeric' })} Oylik Sotuvlar` : `${selectedDay} Kunlik Sotuvlar`) : (chartTimeframe === 'month' ? `${chartTitleLabel} Oylik Sotuvlar` : `${today} Kunlik Sotuvlar`)}
                             </h3>
                           </div>
                           
                           <div className="flex flex-wrap justify-center items-center gap-2 w-full md:w-auto md:absolute md:left-1/2 md:-translate-x-1/2">
                             {(() => {
                               const targetDate = selectedDay || today;
-                              const daySales = state.sales.filter(s => s.userId === selectedUser.id && s.date === targetDate);
+                              let daySales = [];
+                              if (selectedDay) {
+                                if (chartTimeframe === 'year') {
+                                  const monthPrefix = selectedDay.substring(0, 7);
+                                  daySales = state.sales.filter(s => s.userId === selectedUser.id && s.date.startsWith(monthPrefix));
+                                } else {
+                                  daySales = state.sales.filter(s => s.userId === selectedUser.id && s.date === selectedDay);
+                                }
+                              } else if (chartTimeframe === 'month') {
+                                const d = new Date();
+                                d.setDate(1);
+                                d.setMonth(d.getMonth() + monthOffset);
+                                const monthPrefix = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+                                daySales = state.sales.filter(s => s.userId === selectedUser.id && s.date.startsWith(monthPrefix));
+                              } else {
+                                daySales = state.sales.filter(s => s.userId === selectedUser.id && s.date === today);
+                              }
+
                               const companies = [
                                 { name: 'Ucell', color: 'border-purple-500 text-purple-600' },
                                 { name: 'Mobiuz', color: 'border-red-500 text-red-600' },
@@ -1060,8 +1137,24 @@ const ManagerPanel: React.FC<ManagerPanelProps> = ({ state, approveUser, updateU
                             </thead>
                             <tbody className="divide-y divide-gray-50">
                               {(() => {
-                                const targetDate = selectedDay || today;
-                                const daySales = state.sales.filter(s => s.userId === selectedUser.id && s.date === targetDate);
+                                let daySales = [];
+                                if (selectedDay) {
+                                  if (chartTimeframe === 'year') {
+                                    const monthPrefix = selectedDay.substring(0, 7);
+                                    daySales = state.sales.filter(s => s.userId === selectedUser.id && s.date.startsWith(monthPrefix));
+                                  } else {
+                                    daySales = state.sales.filter(s => s.userId === selectedUser.id && s.date === selectedDay);
+                                  }
+                                } else if (chartTimeframe === 'month') {
+                                  const d = new Date();
+                                  d.setDate(1);
+                                  d.setMonth(d.getMonth() + monthOffset);
+                                  const monthPrefix = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+                                  daySales = state.sales.filter(s => s.userId === selectedUser.id && s.date.startsWith(monthPrefix));
+                                } else {
+                                  daySales = state.sales.filter(s => s.userId === selectedUser.id && s.date === today);
+                                }
+
                                 if (daySales.length === 0) {
                                   return (
                                     <tr>
@@ -1070,7 +1163,7 @@ const ManagerPanel: React.FC<ManagerPanelProps> = ({ state, approveUser, updateU
                                           <div className="w-16 h-16 bg-gray-50 rounded-full flex items-center justify-center text-gray-300">
                                             <PackageSearch className="w-10 h-10" />
                                           </div>
-                                          <p className="text-sm font-black text-gray-400 italic">Bu kunda hech nima sotilmagan</p>
+                                          <p className="text-sm font-black text-gray-400 italic">Bu davrda hech nima sotilmagan</p>
                                         </div>
                                       </td>
                                     </tr>
@@ -1085,7 +1178,12 @@ const ManagerPanel: React.FC<ManagerPanelProps> = ({ state, approveUser, updateU
                                     <td className="px-8 py-5 text-center font-black text-lg text-indigo-600">{sale.count}</td>
                                     <td className="px-8 py-5 text-center font-black text-lg text-gray-700">{sale.bonus.toLocaleString()}</td>
                                     <td className="px-8 py-5 text-center font-black text-lg text-indigo-600">{(sale.count + sale.bonus).toLocaleString()}</td>
-                                    <td className="px-8 py-5 text-right text-[10px] font-bold text-gray-300">{new Date(sale.timestamp).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}</td>
+                                    <td className="px-8 py-5 text-right text-[10px] font-bold text-gray-300">
+                                      <div className="flex flex-col items-end">
+                                        <span>{new Date(sale.timestamp).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}</span>
+                                        <span className="text-[8px] text-gray-200">{new Date(sale.timestamp).toLocaleDateString()}</span>
+                                      </div>
+                                    </td>
                                   </tr>
                                 ));
                               })()}
@@ -1172,14 +1270,23 @@ const ManagerPanel: React.FC<ManagerPanelProps> = ({ state, approveUser, updateU
 
                     <div className="space-y-8">
                       <div className="bg-white rounded-[2rem] border border-gray-100 overflow-hidden shadow-sm focus:outline-none">
-                        <h3 className="p-5 text-[10px] font-black text-gray-400 uppercase tracking-widest border-b border-gray-50 flex items-center gap-2"><Clock className="w-4 h-4 text-blue-500" /> {selectedDay || today} DAVOMAT</h3>
+                        <h3 className="p-5 text-[10px] font-black text-gray-400 uppercase tracking-widest border-b border-gray-50 flex items-center justify-between">
+                          <div className="flex items-center gap-2"><Clock className="w-4 h-4 text-blue-500" /> {selectedDay || today} DAVOMAT</div>
+                          {(() => {
+                             const date = selectedDay || today;
+                             const ci = state.checkIns.find(c => c.userId === selectedUser.id && isDateMatch(c.timestamp, date));
+                             const workingHours = ci?.workingHours || selectedUser.workingHours;
+                             return workingHours ? <span className="bg-gray-100 px-2 py-1 rounded-md text-gray-600">{workingHours}</span> : null;
+                          })()}
+                        </h3>
                         <div className="p-6 space-y-4">
                           {(() => {
                             const date = selectedDay || today;
                             const ci = state.checkIns.find(c => c.userId === selectedUser.id && isDateMatch(c.timestamp, date));
                             const co = state.reports.find(r => r.userId === selectedUser.id && r.date === date);
-                            const lateness = ci ? getLatenessStatus(ci.timestamp, selectedUser.workingHours) : null;
-                            const earlyDeparture = co ? getEarlyDepartureStatus(co.timestamp, selectedUser.workingHours) : null;
+                            const workingHours = ci?.workingHours || selectedUser.workingHours;
+                            const lateness = ci ? getLatenessStatus(ci.timestamp, workingHours) : null;
+                            const earlyDeparture = co ? getEarlyDepartureStatus(co.timestamp, workingHours) : null;
                             
                             const arrivalCardStyle = ci 
                               ? (lateness ? 'bg-red-50 border-red-300 shadow-red-100/50' : 'bg-green-50 border-green-100 shadow-green-100/50') 
@@ -1197,14 +1304,55 @@ const ManagerPanel: React.FC<ManagerPanelProps> = ({ state, approveUser, updateU
                                     <div className="flex-1">
                                       <div className="flex justify-between items-start">
                                         <p className="text-[9px] font-black text-gray-400 uppercase tracking-widest">Kelish</p>
-                                        {lateness && (
-                                          <div className="bg-red-600 text-white text-[8px] font-black px-2 py-0.5 rounded-full uppercase animate-pulse shadow-md ring-2 ring-white">LATE</div>
-                                        )}
+                                        <div className="flex items-center gap-2">
+                                          {ci && editingTime?.type !== 'checkIn' && (
+                                            <button 
+                                              onClick={() => {
+                                                const time = new Date(ci.timestamp).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit', hour12: false});
+                                                setEditingTime({ type: 'checkIn', current: time });
+                                                setNewTime(time);
+                                              }}
+                                              className="p-1.5 bg-white/50 rounded-lg hover:bg-white transition shadow-sm"
+                                            >
+                                              <Edit className="w-3.5 h-3.5 text-gray-500" />
+                                            </button>
+                                          )}
+                                          {lateness && (
+                                            <div className="bg-red-600 text-white text-[8px] font-black px-2 py-0.5 rounded-full uppercase animate-pulse shadow-md ring-2 ring-white">LATE</div>
+                                          )}
+                                        </div>
                                       </div>
-                                      <p className={`text-2xl font-black leading-none mt-1 ${ci ? (lateness ? 'text-red-900' : 'text-gray-800') : 'text-red-900/40'}`}>
-                                        {ci ? new Date(ci.timestamp).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit', hour12: true}).toUpperCase() : 'Kelmagan'}
-                                      </p>
-                                      {lateness && (
+                                      {editingTime?.type === 'checkIn' ? (
+                                        <div className="flex items-center gap-2 mt-1">
+                                          <input 
+                                            type="time" 
+                                            value={newTime} 
+                                            onChange={e => setNewTime(e.target.value)}
+                                            className="bg-white border border-gray-200 rounded-lg px-2 py-1 text-lg font-bold w-32 outline-none focus:ring-2 focus:ring-blue-500"
+                                            autoFocus
+                                          />
+                                          <button 
+                                            onClick={() => {
+                                              if (newTime) {
+                                                const [h, m] = newTime.split(':').map(Number);
+                                                const d = new Date(ci!.timestamp);
+                                                d.setHours(h, m);
+                                                updateCheckIn(selectedUser.id, date, { timestamp: d.toISOString() });
+                                                setEditingTime(null);
+                                              }
+                                            }}
+                                            className="p-2 bg-green-500 text-white rounded-lg hover:bg-green-600 transition shadow-sm"
+                                          >
+                                            <Check className="w-4 h-4" />
+                                          </button>
+                                          <button onClick={() => setEditingTime(null)} className="p-2 bg-gray-200 text-gray-600 rounded-lg hover:bg-gray-300 transition shadow-sm"><X className="w-4 h-4" /></button>
+                                        </div>
+                                      ) : (
+                                        <p className={`text-2xl font-black leading-none mt-1 ${ci ? (lateness ? 'text-red-900' : 'text-gray-800') : 'text-red-900/40'}`}>
+                                          {ci ? new Date(ci.timestamp).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit', hour12: true}).toUpperCase() : 'Kelmagan'}
+                                        </p>
+                                      )}
+                                      {lateness && editingTime?.type !== 'checkIn' && (
                                         <div className="mt-2 pt-2 border-t border-red-200 flex items-center gap-1.5 text-red-600 font-black text-[10px] uppercase tracking-wider animate-in fade-in slide-in-from-top-2 duration-500">
                                           <AlertTriangle className="w-3.5 h-3.5" />
                                           <span>{lateness.durationStr} kechikish</span>
@@ -1219,14 +1367,55 @@ const ManagerPanel: React.FC<ManagerPanelProps> = ({ state, approveUser, updateU
                                     <div className="flex-1">
                                       <div className="flex justify-between items-start">
                                         <p className="text-[9px] font-black text-gray-400 uppercase tracking-widest">Ketish</p>
-                                        {earlyDeparture && (
-                                          <div className="bg-orange-500 text-white text-[8px] font-black px-2 py-0.5 rounded-full uppercase animate-pulse shadow-md ring-2 ring-white">EARLY</div>
-                                        )}
+                                        <div className="flex items-center gap-2">
+                                          {co && editingTime?.type !== 'checkOut' && (
+                                            <button 
+                                              onClick={() => {
+                                                const time = new Date(co.timestamp).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit', hour12: false});
+                                                setEditingTime({ type: 'checkOut', current: time });
+                                                setNewTime(time);
+                                              }}
+                                              className="p-1.5 bg-white/50 rounded-lg hover:bg-white transition shadow-sm"
+                                            >
+                                              <Edit className="w-3.5 h-3.5 text-gray-500" />
+                                            </button>
+                                          )}
+                                          {earlyDeparture && (
+                                            <div className="bg-orange-500 text-white text-[8px] font-black px-2 py-0.5 rounded-full uppercase animate-pulse shadow-md ring-2 ring-white">EARLY</div>
+                                          )}
+                                        </div>
                                       </div>
-                                      <p className={`text-2xl font-black leading-none mt-1 ${co ? (earlyDeparture ? 'text-orange-900' : 'text-gray-800') : 'text-gray-400'}`}>
-                                        {co ? new Date(co.timestamp).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit', hour12: true}).toUpperCase() : 'Hali ketmagan'}
-                                      </p>
-                                      {earlyDeparture && (
+                                      {editingTime?.type === 'checkOut' ? (
+                                        <div className="flex items-center gap-2 mt-1">
+                                          <input 
+                                            type="time" 
+                                            value={newTime} 
+                                            onChange={e => setNewTime(e.target.value)}
+                                            className="bg-white border border-gray-200 rounded-lg px-2 py-1 text-lg font-bold w-32 outline-none focus:ring-2 focus:ring-blue-500"
+                                            autoFocus
+                                          />
+                                          <button 
+                                            onClick={() => {
+                                              if (newTime) {
+                                                const [h, m] = newTime.split(':').map(Number);
+                                                const d = new Date(co!.timestamp);
+                                                d.setHours(h, m);
+                                                updateReport(selectedUser.id, date, { timestamp: d.toISOString() });
+                                                setEditingTime(null);
+                                              }
+                                            }}
+                                            className="p-2 bg-green-500 text-white rounded-lg hover:bg-green-600 transition shadow-sm"
+                                          >
+                                            <Check className="w-4 h-4" />
+                                          </button>
+                                          <button onClick={() => setEditingTime(null)} className="p-2 bg-gray-200 text-gray-600 rounded-lg hover:bg-gray-300 transition shadow-sm"><X className="w-4 h-4" /></button>
+                                        </div>
+                                      ) : (
+                                        <p className={`text-2xl font-black leading-none mt-1 ${co ? (earlyDeparture ? 'text-orange-900' : 'text-gray-800') : 'text-gray-400'}`}>
+                                          {co ? new Date(co.timestamp).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit', hour12: true}).toUpperCase() : 'Hali ketmagan'}
+                                        </p>
+                                      )}
+                                      {earlyDeparture && editingTime?.type !== 'checkOut' && (
                                         <div className="mt-2 pt-2 border-t border-orange-200 flex items-center gap-1.5 text-orange-600 font-black text-[10px] uppercase tracking-wider animate-in fade-in slide-in-from-top-2 duration-500">
                                           <AlertTriangle className="w-3.5 h-3.5" />
                                           <span>{earlyDeparture.durationStr} erta ketish</span>
@@ -1290,10 +1479,17 @@ const ManagerPanel: React.FC<ManagerPanelProps> = ({ state, approveUser, updateU
         <div className="space-y-6 animate-in fade-in max-w-4xl mx-auto">
           <div className="flex items-center justify-between">
             <h2 className="text-2xl font-black text-gray-800">Xabarlar Markazi</h2>
-            <div className="flex items-center gap-2 bg-blue-50 px-4 py-2 rounded-2xl">
-              <span className="w-2 h-2 bg-blue-500 rounded-full animate-pulse"></span>
-              <span className="text-[10px] font-black text-blue-600 uppercase tracking-widest">Jonli aloqa</span>
-            </div>
+            <button 
+              onClick={() => {
+                setMessageRecipientId('all');
+                setIsSendMessageModalOpen(true);
+                setMessageText('');
+              }}
+              className="flex items-center gap-2 bg-blue-600 px-6 py-3 rounded-2xl hover:bg-blue-700 transition-all active:scale-95 shadow-lg shadow-blue-100"
+            >
+              <Send className="w-4 h-4 text-white" />
+              <span className="text-[10px] font-black text-white uppercase tracking-widest">Xabar yuborish</span>
+            </button>
           </div>
 
           <div className="grid grid-cols-1 gap-4">
@@ -1310,7 +1506,14 @@ const ManagerPanel: React.FC<ManagerPanelProps> = ({ state, approveUser, updateU
                         {m.senderName[0]}
                       </div>
                       <div>
-                        <h4 className="font-black text-gray-800 text-sm">{m.senderName}</h4>
+                        <h4 className="font-black text-gray-800 text-sm">
+                          {m.senderName} 
+                          {m.recipientId && (
+                            <span className="text-gray-400 font-medium ml-2">
+                              → {m.recipientId === 'all' ? 'Barchaga' : (state.users.find(u => u.id === m.recipientId)?.firstName || 'Xodim')}
+                            </span>
+                          )}
+                        </h4>
                         <p className="text-[10px] text-gray-400 font-bold">{new Date(m.timestamp).toLocaleString()}</p>
                       </div>
                     </div>
@@ -1711,15 +1914,7 @@ const ManagerPanel: React.FC<ManagerPanelProps> = ({ state, approveUser, updateU
                 const target = state.monthlyTargets?.find(t => t.month === targetMonth)?.targets?.[company.name] || 0;
                 const officeCount = state.monthlyTargets?.find(t => t.month === targetMonth)?.officeCounts?.[company.name] || 0;
                 const mobileOfficeCount = state.monthlyTargets?.find(t => t.month === targetMonth)?.mobileOfficeCounts?.[company.name] || 0;
-                const sales = state.sales.filter(s => s.company === company.name && s.date.startsWith(targetMonth)).reduce((sum, s) => sum + s.count, 0);
-                
-                // Total sales including manual office/mobile office entries if needed, 
-                // but usually sales come from Operator inputs. 
-                // If the user wants these to be purely manual additions on top of operator sales, 
-                // we should add them to 'sales'. 
-                // However, based on the context, these seem to be breakdowns or separate stats.
-                // Let's assume they are just for display breakdown as requested.
-                
+                const sales = state.sales.filter(s => s.company === company.name && s.date.startsWith(targetMonth)).reduce((sum, s) => sum + s.count + s.bonus, 0);
                 const rawPercentage = target > 0 ? (sales / target) * 100 : 0;
                 const percentage = Math.min(100, rawPercentage);
                 
@@ -1749,9 +1944,16 @@ const ManagerPanel: React.FC<ManagerPanelProps> = ({ state, approveUser, updateU
                         <span>{sales} / {target}</span>
                         <span>{Math.round(rawPercentage)}%</span>
                       </div>
-                      <div className="flex justify-between text-[9px] font-black text-gray-400 uppercase tracking-widest mt-2 pt-2 border-t border-gray-50">
-                        <div>Mobil ofis: <span className="text-gray-800 ml-1">{mobileOfficeCount}</span></div>
-                        <div>Ofis: <span className="text-gray-800 ml-1">{officeCount}</span></div>
+                      
+                      <div className="pt-4 mt-4 border-t border-gray-50 grid grid-cols-2 gap-2">
+                        <div className="bg-gray-50 p-2 rounded-xl text-center">
+                          <p className="text-[8px] font-black text-gray-400 uppercase tracking-widest mb-0.5">Ofis</p>
+                          <p className="text-sm font-black text-gray-700">{officeCount}</p>
+                        </div>
+                        <div className="bg-gray-50 p-2 rounded-xl text-center">
+                          <p className="text-[8px] font-black text-gray-400 uppercase tracking-widest mb-0.5">Mobil Ofis</p>
+                          <p className="text-sm font-black text-gray-700">{mobileOfficeCount}</p>
+                        </div>
                       </div>
                     </div>
                   </div>

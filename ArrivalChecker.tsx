@@ -4,6 +4,7 @@ import Auth from './components/Auth';
 import ManagerPanel from './components/ManagerPanel';
 import OperatorPanel from './components/OperatorPanel';
 import { AppState, Role, User, CheckIn, SimSale, DailyReport, Message, MonthlyTarget } from './types';
+import { getTodayStr, isDateMatch } from './utils';
 
 const ArrivalChecker: React.FC = () => {
   const [state, setState] = useState<AppState>(() => {
@@ -52,13 +53,64 @@ const ArrivalChecker: React.FC = () => {
     <div className="min-h-screen bg-gray-50 font-sans text-gray-900">
       {/* Header */}
       <header className="bg-white border-b border-gray-200 sticky top-0 z-30">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
-          <div className="flex items-center gap-3">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between gap-4">
+          <div className="flex items-center gap-3 shrink-0">
             <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center text-white font-black text-sm">SB</div>
-            <h1 className="text-lg font-bold text-gray-800 hidden sm:block">Sam Brend Nomer</h1>
+            <h1 className="text-lg font-bold text-gray-800 hidden lg:block">Sam Brend Nomer</h1>
+          </div>
+
+          <div className="flex-1 overflow-x-auto flex items-center justify-center gap-2 no-scrollbar px-2">
+            {state.currentUser.role === Role.MANAGER ? (
+              [
+                { id: 'overview', label: 'Umumiy', icon: '📊' },
+                { id: 'users', label: 'Xodimlar', icon: '👥' },
+                { id: 'reports', label: 'Hisobotlar', icon: '📝' },
+                { id: 'simcards', label: 'Ombor & Reja', icon: '📱' },
+                { id: 'messages', label: 'Xabarlar', icon: '💬' },
+                { id: 'approvals', label: 'Tasdiqlash', icon: '✅', count: state.users.filter(u => !u.isApproved).length }
+              ].map(tab => (
+                <button
+                  key={tab.id}
+                  onClick={() => setActiveTab(tab.id as any)}
+                  className={`flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-bold whitespace-nowrap transition-all ${
+                    activeTab === tab.id 
+                      ? 'bg-blue-600 text-white shadow-md shadow-blue-200' 
+                      : 'bg-gray-50 text-gray-600 hover:bg-gray-100 border border-transparent'
+                  }`}
+                >
+                  <span>{tab.icon}</span>
+                  <span className="hidden sm:inline">{tab.label}</span>
+                  {tab.count ? (
+                    <span className="bg-red-500 text-white text-[10px] px-1.5 py-0.5 rounded-full">{tab.count}</span>
+                  ) : null}
+                </button>
+              ))
+            ) : (
+              [
+                { id: 'checkin', label: 'Asosiy', icon: '🏠' },
+                { id: 'simcards', label: 'Ombor', icon: '📱' },
+                { id: 'monitoring', label: 'Monitoring', icon: '📈' },
+                { id: 'rating', label: 'Reyting', icon: '🏆' },
+                { id: 'messages', label: 'Xabarlar', icon: '💬' },
+                { id: 'profile', label: 'Profil', icon: '👤' }
+              ].map(tab => (
+                <button
+                  key={tab.id}
+                  onClick={() => setOperatorTab(tab.id)}
+                  className={`flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-bold whitespace-nowrap transition-all ${
+                    operatorTab === tab.id 
+                      ? 'bg-blue-600 text-white shadow-md shadow-blue-200' 
+                      : 'bg-gray-50 text-gray-600 hover:bg-gray-100 border border-transparent'
+                  }`}
+                >
+                  <span>{tab.icon}</span>
+                  <span className="hidden sm:inline">{tab.label}</span>
+                </button>
+              ))
+            )}
           </div>
           
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-4 shrink-0">
             <div className="flex items-center gap-3 bg-gray-50 px-3 py-1.5 rounded-full border border-gray-100">
               <div className="w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center text-blue-600 font-bold text-xs">
                 {state.currentUser.firstName[0]}
@@ -82,39 +134,44 @@ const ArrivalChecker: React.FC = () => {
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {state.currentUser.role === Role.MANAGER ? (
           <>
-            {/* Manager Navigation */}
-            <div className="flex overflow-x-auto pb-4 mb-6 gap-2 no-scrollbar">
-              {[
-                { id: 'overview', label: 'Umumiy', icon: '📊' },
-                { id: 'users', label: 'Xodimlar', icon: '👥' },
-                { id: 'reports', label: 'Hisobotlar', icon: '📝' },
-                { id: 'simcards', label: 'Ombor & Reja', icon: '📱' },
-                { id: 'messages', label: 'Xabarlar', icon: '💬' },
-                { id: 'approvals', label: 'Tasdiqlash', icon: '✅', count: state.users.filter(u => !u.isApproved).length }
-              ].map(tab => (
-                <button
-                  key={tab.id}
-                  onClick={() => setActiveTab(tab.id as any)}
-                  className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-bold whitespace-nowrap transition-all ${
-                    activeTab === tab.id 
-                      ? 'bg-blue-600 text-white shadow-lg shadow-blue-200' 
-                      : 'bg-white text-gray-600 hover:bg-gray-50 border border-gray-200'
-                  }`}
-                >
-                  <span>{tab.icon}</span>
-                  <span>{tab.label}</span>
-                  {tab.count ? (
-                    <span className="bg-red-500 text-white text-[10px] px-1.5 py-0.5 rounded-full">{tab.count}</span>
-                  ) : null}
-                </button>
-              ))}
-            </div>
+            {/* Manager Navigation removed from here */}
 
             <ManagerPanel 
               state={state}
               approveUser={(userId) => setState(prev => ({ ...prev, users: prev.users.map(u => u.id === userId ? { ...u, isApproved: true } : u) }))}
-              updateUser={(userId, updates) => setState(prev => ({ ...prev, users: prev.users.map(u => u.id === userId ? { ...u, ...updates } : u) }))}
-              addMessage={(text) => setState(prev => ({ ...prev, messages: [...prev.messages, { id: Date.now().toString(), senderId: state.currentUser!.id, senderName: 'MENEJER', text, timestamp: new Date().toISOString(), isRead: false }] }))}
+              updateUser={(userId, updates) => setState(prev => {
+                // If workingHours is being updated, handle check-ins
+                let newCheckIns = prev.checkIns;
+                if (updates.workingHours) {
+                  const user = prev.users.find(u => u.id === userId);
+                  if (user) {
+                    const today = getTodayStr();
+                    newCheckIns = prev.checkIns.map(ci => {
+                      if (ci.userId === userId) {
+                        const isToday = ci.date === today || isDateMatch(ci.timestamp, today);
+                        
+                        if (isToday) {
+                          // For today, ALWAYS update to the NEW working hours
+                          return { ...ci, workingHours: updates.workingHours };
+                        } else if (!ci.workingHours && user.workingHours) {
+                          // For past days, if missing, backfill with OLD working hours to preserve history
+                          return { ...ci, workingHours: user.workingHours };
+                        }
+                      }
+                      return ci;
+                    });
+                  }
+                }
+                
+                return {
+                  ...prev,
+                  users: prev.users.map(u => u.id === userId ? { ...u, ...updates } : u),
+                  checkIns: newCheckIns
+                };
+              })}
+              updateCheckIn={(userId, date, updates) => setState(prev => ({ ...prev, checkIns: prev.checkIns.map(c => c.userId === userId && isDateMatch(c.timestamp, date) ? { ...c, ...updates } : c) }))}
+              updateReport={(userId, date, updates) => setState(prev => ({ ...prev, reports: prev.reports.map(r => r.userId === userId && r.date === date ? { ...r, ...updates } : r) }))}
+              addMessage={(text, recipientId) => setState(prev => ({ ...prev, messages: [...prev.messages, { id: Date.now().toString(), senderId: state.currentUser!.id, senderName: 'MENEJER', recipientId, text, timestamp: new Date().toISOString(), isRead: false }] }))}
               markMessageAsRead={(msgId) => setState(prev => ({ ...prev, messages: prev.messages.map(m => m.id === msgId ? { ...m, isRead: true } : m) }))}
               activeTab={activeTab}
               setActiveTab={setActiveTab}
@@ -130,36 +187,44 @@ const ArrivalChecker: React.FC = () => {
           </>
         ) : (
           <>
-             {/* Operator Navigation */}
-             <div className="flex overflow-x-auto pb-4 mb-6 gap-2 no-scrollbar justify-center">
-              {[
-                { id: 'checkin', label: 'Asosiy', icon: '🏠' },
-                { id: 'simcards', label: 'Ombor', icon: '📱' },
-                { id: 'monitoring', label: 'Monitoring', icon: '📈' },
-                { id: 'rating', label: 'Reyting', icon: '🏆' },
-                { id: 'profile', label: 'Profil', icon: '👤' }
-              ].map(tab => (
-                <button
-                  key={tab.id}
-                  onClick={() => setOperatorTab(tab.id)}
-                  className={`flex items-center gap-2 px-5 py-3 rounded-2xl text-sm font-bold whitespace-nowrap transition-all ${
-                    operatorTab === tab.id 
-                      ? 'bg-blue-600 text-white shadow-lg shadow-blue-200 scale-105' 
-                      : 'bg-white text-gray-600 hover:bg-gray-50 border border-gray-200'
-                  }`}
-                >
-                  <span>{tab.icon}</span>
-                  <span>{tab.label}</span>
-                </button>
-              ))}
-            </div>
+             {/* Operator Navigation removed from here */}
 
             <OperatorPanel 
               user={state.currentUser}
               state={state}
               addCheckIn={(checkIn) => setState(prev => ({ ...prev, checkIns: [...prev.checkIns, checkIn] }))}
               updateCheckIn={(userId, date, updates) => setState(prev => ({ ...prev, checkIns: prev.checkIns.map(c => c.userId === userId && c.timestamp.startsWith(date) ? { ...c, ...updates } : c) }))}
-              updateUser={(userId, updates) => setState(prev => ({ ...prev, users: prev.users.map(u => u.id === userId ? { ...u, ...updates } : u) }))}
+              updateReport={(userId, date, updates) => setState(prev => ({ ...prev, reports: prev.reports.map(r => r.userId === userId && r.date === date ? { ...r, ...updates } : r) }))}
+              updateUser={(userId, updates) => setState(prev => {
+                // If workingHours is being updated, handle check-ins
+                let newCheckIns = prev.checkIns;
+                if (updates.workingHours) {
+                  const user = prev.users.find(u => u.id === userId);
+                  if (user) {
+                    const today = getTodayStr();
+                    newCheckIns = prev.checkIns.map(ci => {
+                      if (ci.userId === userId) {
+                        const isToday = ci.date === today || isDateMatch(ci.timestamp, today);
+                        
+                        if (isToday) {
+                          // For today, ALWAYS update to the NEW working hours
+                          return { ...ci, workingHours: updates.workingHours };
+                        } else if (!ci.workingHours && user.workingHours) {
+                          // For past days, if missing, backfill with OLD working hours to preserve history
+                          return { ...ci, workingHours: user.workingHours };
+                        }
+                      }
+                      return ci;
+                    });
+                  }
+                }
+                
+                return {
+                  ...prev,
+                  users: prev.users.map(u => u.id === userId ? { ...u, ...updates } : u),
+                  checkIns: newCheckIns
+                };
+              })}
               addSale={(sale) => setState(prev => {
                 // Deduct from inventory
                 const user = prev.users.find(u => u.id === sale.userId);
@@ -241,7 +306,8 @@ const ArrivalChecker: React.FC = () => {
                 }
                 return prev;
               })}
-              addMessage={(text) => setState(prev => ({ ...prev, messages: [...prev.messages, { id: Date.now().toString(), senderId: state.currentUser!.id, senderName: `${state.currentUser!.firstName} ${state.currentUser!.lastName}`, text, timestamp: new Date().toISOString(), isRead: false }] }))}
+              addMessage={(text) => setState(prev => ({ ...prev, messages: [...prev.messages, { id: Date.now().toString(), senderId: state.currentUser!.id, senderName: `${state.currentUser!.firstName} ${state.currentUser!.lastName}`, recipientId: 'manager', text, timestamp: new Date().toISOString(), isRead: false }] }))}
+              markMessageAsRead={(msgId) => setState(prev => ({ ...prev, messages: prev.messages.map(m => m.id === msgId ? { ...m, isRead: true } : m) }))}
               activeTab={operatorTab}
             />
           </>
