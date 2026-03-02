@@ -1,9 +1,10 @@
 
 import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { User, AppState, CheckIn, SimSale, DailyReport } from '../types';
-import { Camera, MapPin, CheckCircle2, Send, Plus, History, Trash2, Smartphone, Upload, Image as ImageIcon, TrendingUp, Loader2, Edit3, AlertTriangle, RefreshCw, LogIn, LogOut, X, Trophy, Activity, ChevronLeft, ChevronRight, RotateCcw, BarChart3, Calendar, PlusCircle, Edit, Check, Users } from 'lucide-react';
+import { Camera, MapPin, CheckCircle2, Send, Plus, History, Trash2, Smartphone, Upload, Image as ImageIcon, TrendingUp, Loader2, Edit3, AlertTriangle, RefreshCw, LogIn, LogOut, X, Trophy, Activity, ChevronLeft, ChevronRight, RotateCcw, BarChart3, Calendar, PlusCircle, Edit, Check, Users, ChevronDown } from 'lucide-react';
 import { getTodayStr, isDateMatch, getLatenessStatus, getUzTime } from '../utils';
 import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip } from 'recharts';
+import { t, Language } from '../translations';
 
 interface OperatorPanelProps {
   user: User;
@@ -20,9 +21,18 @@ interface OperatorPanelProps {
   addMessage: (text: string) => void;
   markMessageAsRead: (messageId: string) => void;
   activeTab: string;
+  language: 'uz' | 'ru' | 'en';
 }
 
-const OperatorPanel: React.FC<OperatorPanelProps> = ({ user, state, addCheckIn, updateCheckIn, updateReport, updateUser, addSale, removeSale, updateSale, addReport, addSimInventory, addMessage, markMessageAsRead, activeTab }) => {
+const OperatorPanel: React.FC<OperatorPanelProps> = ({ user, state, addCheckIn, updateCheckIn, updateReport, updateUser, addSale, removeSale, updateSale, addReport, addSimInventory, addMessage, markMessageAsRead, activeTab, language }) => {
+  const formatLargeNumber = (val: any) => {
+    const num = Number(val);
+    if (isNaN(num)) return '0';
+    if (num > 999999999) return '999M+';
+    if (num >= 1000000) return (num / 1000000).toFixed(1) + 'M';
+    return Math.round(num).toLocaleString('uz-UZ');
+  };
+
   const today = getTodayStr();
   const targetMonth = today.substring(0, 7);
   const monthlyTarget = state.monthlyTargets.find(t => t.month === targetMonth);
@@ -48,9 +58,11 @@ const OperatorPanel: React.FC<OperatorPanelProps> = ({ user, state, addCheckIn, 
   const [reportText, setReportText] = useState('');
   const [showSaleForm, setShowSaleForm] = useState(false);
   const [editingSaleId, setEditingSaleId] = useState<string | null>(null);
+  const [deletingSaleId, setDeletingSaleId] = useState<string | null>(null);
   const [showSimEntryForm, setShowSimEntryForm] = useState(false);
   const [newSimEntry, setNewSimEntry] = useState({ company: 'Ucell', count: '1' });
   const [newSale, setNewSale] = useState({ company: 'Ucell', tariff: '', count: '1', bonus: '0' });
+  const [openDropdown, setOpenDropdown] = useState<'company' | 'tariff' | 'simCompany' | null>(null);
   const [ratingMonthOffset, setRatingMonthOffset] = useState(0);
   const [monitoringTimeframe, setMonitoringTimeframe] = useState<'week' | 'month' | 'year'>('week');
   const [monitoringWeekOffset, setMonitoringWeekOffset] = useState(0);
@@ -204,33 +216,33 @@ const OperatorPanel: React.FC<OperatorPanelProps> = ({ user, state, addCheckIn, 
 
   const renderCheckInForm = () => (
     <div className="max-w-2xl mx-auto py-12 px-4">
-      <div className="bg-white rounded-[3.5rem] shadow-2xl overflow-hidden border border-gray-100 animate-in zoom-in-95 duration-500">
-        <div className="p-12 text-center border-b bg-gradient-to-br from-blue-50 to-indigo-50/40">
-          <h2 className="text-3xl font-black text-blue-900 tracking-tight">{isEditingCheckIn ? "Ma'lumotlarni yangilash" : "Xush kelibsiz!"}</h2>
-          <p className="text-gray-500 mt-3 font-medium">Ishni boshlash uchun rasm va manzilingizni yuboring.</p>
+      <div className="bg-brand-dark rounded-[3.5rem] shadow-2xl overflow-hidden border border-white/10 animate-in zoom-in-95 duration-500">
+        <div className="p-12 text-center border-b border-white/10 bg-gradient-to-br from-brand-gold/10 to-brand-gold/5">
+          <h2 className="text-3xl font-black text-brand-gold tracking-tight uppercase">{isEditingCheckIn ? "Ma'lumotlarni yangilash" : "Xush kelibsiz!"}</h2>
+          <p className="text-white/40 mt-3 font-medium">Ishni boshlash uchun rasm va manzilingizni yuboring.</p>
         </div>
         <div className="p-10 space-y-8">
-          <div onClick={() => fileInputRef.current?.click()} className="aspect-video bg-gray-50 rounded-[2.5rem] overflow-hidden relative border-4 border-dashed border-gray-100 flex items-center justify-center cursor-pointer hover:border-blue-300 transition-all">
+          <div onClick={() => fileInputRef.current?.click()} className="aspect-video bg-white/5 rounded-[2.5rem] overflow-hidden relative border-4 border-dashed border-white/10 flex items-center justify-center cursor-pointer hover:border-brand-gold/30 transition-all">
             {capturedPhoto ? <img src={capturedPhoto} className="w-full h-full object-cover" /> : (
               <div className="text-center">
-                <Camera className="w-16 h-16 text-gray-300 mx-auto mb-4" />
-                <p className="text-gray-400 font-bold uppercase text-[10px] tracking-widest">Ish joyidan rasm yuklang</p>
+                <Camera className="w-16 h-16 text-white/10 mx-auto mb-4" />
+                <p className="text-white/20 font-black uppercase text-[10px] tracking-widest">Ish joyidan rasm yuklang</p>
               </div>
             )}
             <input type="file" ref={fileInputRef} onChange={handleFileUpload} accept="image/*" className="hidden" />
           </div>
-          <div className="bg-gray-50 p-6 rounded-3xl border border-gray-100 flex items-center justify-between">
+          <div className="bg-white/5 p-6 rounded-3xl border border-white/10 flex items-center justify-between">
             <div className="flex items-center gap-4">
-              <div className={`p-4 rounded-xl ${isLocating ? 'bg-blue-100 text-blue-600 animate-pulse' : 'bg-green-100 text-green-600'}`}><MapPin className="w-6 h-6" /></div>
+              <div className={`p-4 rounded-xl ${isLocating ? 'bg-brand-gold/10 text-brand-gold animate-pulse' : 'bg-green-500/10 text-green-500'}`}><MapPin className="w-6 h-6" /></div>
               <div>
-                <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">{isLocating ? 'Aniqlanmoqda...' : 'Joylashuv'}</p>
-                <p className="text-lg font-black text-gray-800">{location ? `${location.lat.toFixed(5)}, ${location.lng.toFixed(5)}` : 'Kutilmoqda...'}</p>
+                <p className="text-[10px] font-black text-white/30 uppercase tracking-widest">{isLocating ? 'Aniqlanmoqda...' : 'Joylashuv'}</p>
+                <p className="text-lg font-black text-white">{location ? `${location.lat.toFixed(5)}, ${location.lng.toFixed(5)}` : 'Kutilmoqda...'}</p>
               </div>
             </div>
-            <button onClick={refreshLocation} disabled={isLocating} className="p-3.5 bg-white text-blue-600 rounded-xl shadow-sm border border-gray-100 hover:rotate-180 transition-all duration-700"><RefreshCw className={`w-5 h-5 ${isLocating ? 'animate-spin' : ''}`} /></button>
+            <button onClick={refreshLocation} disabled={isLocating} className="p-3.5 bg-white/5 text-brand-gold rounded-xl shadow-sm border border-white/10 hover:rotate-180 transition-all duration-700"><RefreshCw className={`w-5 h-5 ${isLocating ? 'animate-spin' : ''}`} /></button>
           </div>
           <div className="flex gap-4">
-            <button onClick={handleCheckInAction} disabled={!location || isLocating || !capturedPhoto} className="flex-1 py-6 bg-blue-600 text-white rounded-[2rem] font-black uppercase tracking-widest text-xs shadow-xl shadow-blue-100 hover:bg-blue-700 active:scale-95 disabled:opacity-50 transition-all">
+            <button onClick={handleCheckInAction} disabled={!location || isLocating || !capturedPhoto} className="flex-1 py-6 gold-gradient text-brand-black rounded-[2rem] font-black uppercase tracking-widest text-xs shadow-xl shadow-brand-gold/20 hover:scale-[1.02] active:scale-95 disabled:opacity-50 transition-all">
               {isEditingCheckIn ? "Saqlash" : "Ishni boshlash"}
             </button>
             {(isEditingCheckIn || (!hasCheckedIn && showCheckInUI)) && (
@@ -239,7 +251,7 @@ const OperatorPanel: React.FC<OperatorPanelProps> = ({ user, state, addCheckIn, 
                   setIsEditingCheckIn(false);
                   setShowCheckInUI(false);
                 }} 
-                className="px-10 py-6 bg-white border border-gray-200 text-gray-400 rounded-[2rem] font-black uppercase tracking-widest text-xs"
+                className="px-10 py-6 bg-white/5 border border-white/10 text-white/40 rounded-[2rem] font-black uppercase tracking-widest text-xs hover:bg-white/10 transition-all"
               >
                 Bekor qilish
               </button>
@@ -304,50 +316,50 @@ const OperatorPanel: React.FC<OperatorPanelProps> = ({ user, state, addCheckIn, 
         return (
           <div className="space-y-12 animate-in fade-in slide-in-from-bottom-8 duration-1000 max-w-6xl mx-auto py-8 px-4">
             {/* Elegant Header */}
-            <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 border-b border-gray-100 pb-12">
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 border-b border-white/10 pb-12">
               <div className="space-y-2">
-                <div className="flex items-center gap-2 text-blue-600 font-bold text-[10px] uppercase tracking-[0.2em]">
+                <div className="flex items-center gap-2 text-brand-gold font-bold text-[10px] uppercase tracking-[0.2em]">
                   <Trophy className="w-4 h-4" />
                   <span>Muvaffaqiyatlar Sarhisobi</span>
                 </div>
-                <h2 className="text-5xl font-extrabold text-slate-900 tracking-tight">
-                  Reyting <span className="text-blue-600">Jadvali</span>
+                <h2 className="text-5xl font-extrabold text-white tracking-tight">
+                  {t(language, 'rating_table').split(' ')[0]} <span className="text-brand-gold">{t(language, 'rating_table').split(' ')[1]}</span>
                 </h2>
-                <p className="text-slate-500 font-medium">
+                <p className="text-white/40 font-medium">
                   {monthName} natijalari bo'yicha eng yaxshi ko'rsatkichga ega operatorlar.
                 </p>
               </div>
-              <div className="flex items-center gap-3 bg-slate-50 p-1.5 rounded-2xl border border-slate-100">
-                <div className="flex items-center gap-1 bg-white p-1 rounded-xl border border-slate-200/50 shadow-sm">
+              <div className="flex items-center gap-3 bg-brand-black p-1.5 rounded-2xl border border-white/10">
+                <div className="flex items-center gap-1 bg-brand-dark p-1 rounded-xl border border-white/5 shadow-sm">
                   <button 
                     onClick={() => setRatingMonthOffset(prev => prev - 1)}
-                    className="p-2 hover:bg-slate-50 rounded-lg transition-colors text-slate-400 hover:text-blue-600"
+                    className="p-2 hover:bg-white/5 rounded-lg transition-colors text-white/40 hover:text-brand-gold"
                   >
                     <ChevronLeft className="w-4 h-4" />
                   </button>
-                  <span className="text-[10px] font-black text-slate-600 px-4 uppercase tracking-widest min-w-[120px] text-center">
+                  <span className="text-[10px] font-black text-white/60 px-4 uppercase tracking-widest min-w-[120px] text-center">
                     {monthName}
                   </span>
                   <button 
                     onClick={() => setRatingMonthOffset(prev => prev + 1)}
-                    className="p-2 hover:bg-slate-50 rounded-lg transition-colors text-slate-400 hover:text-blue-600"
+                    className="p-2 hover:bg-white/5 rounded-lg transition-colors text-white/40 hover:text-brand-gold"
                   >
                     <ChevronRight className="w-4 h-4" />
                   </button>
                 </div>
-                <div className="bg-white px-4 py-2 rounded-xl shadow-sm border border-slate-200/50 flex items-center gap-2">
-                  <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse"></div>
-                  <span className="text-[10px] font-bold text-slate-600 uppercase tracking-wider">Jonli Yangilanish</span>
+                <div className="bg-brand-dark px-4 py-2 rounded-xl shadow-sm border border-white/5 flex items-center gap-2">
+                  <div className="w-2 h-2 rounded-full bg-brand-gold animate-pulse"></div>
+                  <span className="text-[10px] font-bold text-white/60 uppercase tracking-wider">Jonli Yangilanish</span>
                 </div>
               </div>
             </div>
 
             {operatorRankings.length === 0 ? (
               <div className="py-20 text-center space-y-4">
-                <div className="w-20 h-20 bg-slate-50 rounded-full flex items-center justify-center mx-auto border border-slate-100">
-                  <Users className="w-10 h-10 text-slate-300" />
+                <div className="w-20 h-20 bg-brand-black rounded-full flex items-center justify-center mx-auto border border-white/10">
+                  <Users className="w-10 h-10 text-white/10" />
                 </div>
-                <p className="text-slate-400 font-bold uppercase tracking-widest text-xs">Hali operatorlar qo'shilmagan</p>
+                <p className="text-white/20 font-bold uppercase tracking-widest text-xs">Hali operatorlar qo'shilmagan</p>
               </div>
             ) : (
               <>
@@ -355,10 +367,10 @@ const OperatorPanel: React.FC<OperatorPanelProps> = ({ user, state, addCheckIn, 
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-8 items-end pt-10">
               {/* 2nd Place */}
               <div className="order-2 md:order-1">
-                <div className="bg-gradient-to-b from-slate-50 to-slate-200 rounded-[2.5rem] p-8 border border-slate-300 shadow-xl shadow-slate-300/40 relative group hover:-translate-y-2 transition-all duration-500">
-                  <div className="absolute -top-6 left-1/2 -translate-x-1/2 w-12 h-12 bg-slate-400 rounded-2xl flex items-center justify-center font-black text-white border-4 border-white shadow-lg">2</div>
+                <div className="bg-brand-dark rounded-[2.5rem] p-8 border border-white/10 shadow-xl relative group hover:-translate-y-2 transition-all duration-500">
+                  <div className="absolute -top-6 left-1/2 -translate-x-1/2 w-12 h-12 bg-white/10 rounded-2xl flex items-center justify-center font-black text-white border-4 border-brand-dark shadow-lg">2</div>
                   <div className="flex flex-col items-center text-center space-y-4">
-                    <div className="w-20 h-20 rounded-3xl bg-white border border-slate-300 flex items-center justify-center text-2xl font-black text-slate-400 group-hover:bg-blue-50 group-hover:text-blue-500 transition-colors shadow-sm overflow-hidden">
+                    <div className="w-20 h-20 rounded-3xl bg-brand-black border border-white/5 flex items-center justify-center text-2xl font-black text-white/20 group-hover:bg-white/10 group-hover:text-white transition-colors shadow-sm overflow-hidden">
                       {top3[1]?.photo ? (
                         <img src={top3[1].photo} alt={top3[1].firstName} className="w-full h-full object-cover" />
                       ) : (
@@ -366,8 +378,8 @@ const OperatorPanel: React.FC<OperatorPanelProps> = ({ user, state, addCheckIn, 
                       )}
                     </div>
                     <div>
-                      <h3 className="text-xl font-bold text-slate-900">{top3[1]?.firstName} {top3[1]?.lastName}</h3>
-                      <p className="text-[10px] font-black text-slate-600 uppercase tracking-widest">Kumush Daraja</p>
+                      <h3 className="text-xl font-bold text-white">{top3[1]?.firstName} {top3[1]?.lastName}</h3>
+                      <p className="text-[10px] font-black text-white/40 uppercase tracking-widest">Kumush Daraja</p>
                     </div>
                   </div>
                 </div>
@@ -375,14 +387,14 @@ const OperatorPanel: React.FC<OperatorPanelProps> = ({ user, state, addCheckIn, 
 
               {/* 1st Place */}
               <div className="order-1 md:order-2">
-                <div className="bg-gradient-to-br from-yellow-400 via-yellow-500 to-amber-600 rounded-[3rem] p-10 text-white shadow-2xl shadow-yellow-200/50 relative group hover:-translate-y-4 transition-all duration-500 border-4 border-white/30">
+                <div className="bg-gradient-to-br from-[#F2D06B] via-[#D4AF37] to-[#997A1F] rounded-[3rem] p-10 !text-black shadow-2xl shadow-[#D4AF37]/20 relative group hover:-translate-y-4 transition-all duration-500 border-4 border-white/10">
                   <div className="absolute top-0 right-0 w-32 h-32 bg-white/20 rounded-full -mr-16 -mt-16 blur-3xl group-hover:bg-white/40 transition-all"></div>
-                  <div className="absolute -top-8 left-1/2 -translate-x-1/2 w-16 h-16 bg-white rounded-2xl flex items-center justify-center font-black text-yellow-600 border-4 border-yellow-400 shadow-xl rotate-3 group-hover:rotate-12 transition-transform">
+                  <div className="absolute -top-8 left-1/2 -translate-x-1/2 w-16 h-16 bg-[#D4AF37] rounded-2xl flex items-center justify-center font-black text-white keep-white shadow-xl rotate-3 group-hover:rotate-12 transition-transform">
                     <Trophy className="w-8 h-8" />
                   </div>
                   <div className="flex flex-col items-center text-center space-y-6 relative z-10">
-                    <div className="w-28 h-28 rounded-[2.5rem] bg-white/20 p-1 shadow-2xl backdrop-blur-sm">
-                      <div className="w-full h-full rounded-[2.3rem] bg-white flex items-center justify-center text-4xl font-black text-yellow-600 overflow-hidden">
+                    <div className="w-28 h-28 rounded-[2.5rem] bg-black/20 p-1 shadow-2xl backdrop-blur-sm">
+                      <div className="w-full h-full rounded-[2.3rem] bg-brand-black flex items-center justify-center text-4xl font-black text-[#D4AF37] overflow-hidden">
                         {top3[0]?.photo ? (
                           <img src={top3[0].photo} alt={top3[0].firstName} className="w-full h-full object-cover" />
                         ) : (
@@ -394,7 +406,7 @@ const OperatorPanel: React.FC<OperatorPanelProps> = ({ user, state, addCheckIn, 
                       <h3 className="text-3xl font-black text-white tracking-tight drop-shadow-md">{top3[0]?.firstName} {top3[0]?.lastName}</h3>
                       <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-black/10 border border-white/20 mt-2">
                         <span className="w-1.5 h-1.5 rounded-full bg-white animate-pulse"></span>
-                        <span className="text-[9px] font-black uppercase tracking-widest text-white">Oylik Chempion</span>
+                        <span className="text-[9px] font-black uppercase tracking-widest text-white">{t(language, 'monthly_champion')}</span>
                       </div>
                     </div>
                   </div>
@@ -403,10 +415,10 @@ const OperatorPanel: React.FC<OperatorPanelProps> = ({ user, state, addCheckIn, 
 
               {/* 3rd Place */}
               <div className="order-3">
-                <div className="bg-gradient-to-b from-orange-50 to-orange-200 rounded-[2.5rem] p-8 border border-orange-300 shadow-xl shadow-orange-300/40 relative group hover:-translate-y-2 transition-all duration-500">
-                  <div className="absolute -top-6 left-1/2 -translate-x-1/2 w-12 h-12 bg-orange-500 rounded-2xl flex items-center justify-center font-black text-white border-4 border-white shadow-lg">3</div>
+                <div className="bg-brand-dark rounded-[2.5rem] p-8 border border-white/10 shadow-xl relative group hover:-translate-y-2 transition-all duration-500">
+                  <div className="absolute -top-6 left-1/2 -translate-x-1/2 w-12 h-12 bg-orange-500/80 rounded-2xl flex items-center justify-center font-black text-white border-4 border-brand-dark shadow-lg">3</div>
                   <div className="flex flex-col items-center text-center space-y-4">
-                    <div className="w-20 h-20 rounded-3xl bg-white border border-orange-200 flex items-center justify-center text-2xl font-black text-orange-400 group-hover:bg-orange-50 group-hover:text-orange-600 transition-colors shadow-sm overflow-hidden">
+                    <div className="w-20 h-20 rounded-3xl bg-brand-black border border-white/5 flex items-center justify-center text-2xl font-black text-white/20 group-hover:bg-orange-500/10 group-hover:text-orange-500 transition-colors shadow-sm overflow-hidden">
                       {top3[2]?.photo ? (
                         <img src={top3[2].photo} alt={top3[2].firstName} className="w-full h-full object-cover" />
                       ) : (
@@ -414,8 +426,8 @@ const OperatorPanel: React.FC<OperatorPanelProps> = ({ user, state, addCheckIn, 
                       )}
                     </div>
                     <div>
-                      <h3 className="text-xl font-bold text-slate-900">{top3[2]?.firstName} {top3[2]?.lastName}</h3>
-                      <p className="text-[10px] font-black text-orange-600 uppercase tracking-widest">Bronza Daraja</p>
+                      <h3 className="text-xl font-bold text-white">{top3[2]?.firstName} {top3[2]?.lastName}</h3>
+                      <p className="text-[10px] font-black text-orange-500 uppercase tracking-widest">Bronza Daraja</p>
                     </div>
                   </div>
                 </div>
@@ -423,17 +435,17 @@ const OperatorPanel: React.FC<OperatorPanelProps> = ({ user, state, addCheckIn, 
             </div>
 
                 {/* List Section */}
-                <div className="bg-white rounded-[2.5rem] border border-slate-100 shadow-2xl shadow-slate-200/30 overflow-hidden">
-                  <div className="px-8 py-6 bg-slate-50/50 border-b border-slate-100 flex items-center justify-between">
-                    <span className="text-[11px] font-black text-slate-400 uppercase tracking-[0.2em]">Boshqa Ishtirokchilar</span>
+                <div className="bg-brand-dark rounded-[2.5rem] border border-white/10 shadow-2xl overflow-hidden">
+                  <div className="px-8 py-6 bg-brand-black border-b border-white/10 flex items-center justify-between">
+                    <span className="text-[11px] font-black text-white/20 uppercase tracking-[0.2em]">Boshqa Ishtirokchilar</span>
                   </div>
-                  <div className="divide-y divide-slate-50">
+                  <div className="divide-y divide-white/5">
                     {operatorRankings.length > 3 ? (
                       operatorRankings.slice(3).map((u, idx) => (
-                        <div key={u.id} className={`px-8 py-6 flex items-center justify-between hover:bg-slate-50/50 transition-colors group ${u.id === user.id ? 'bg-blue-50/50' : ''}`}>
+                        <div key={u.id} className={`px-8 py-6 flex items-center justify-between hover:bg-white/5 transition-colors group ${u.id === user.id ? 'bg-brand-gold/5' : ''}`}>
                           <div className="flex items-center gap-6">
-                            <span className="w-6 text-center font-bold text-slate-300 group-hover:text-blue-500 transition-colors">{idx + 4}</span>
-                            <div className="w-12 h-12 rounded-2xl bg-slate-100 border border-slate-200/50 flex items-center justify-center font-bold text-slate-400 text-sm group-hover:scale-110 group-hover:bg-white transition-all overflow-hidden">
+                            <span className="w-6 text-center font-bold text-white/20 group-hover:text-brand-gold transition-colors">{idx + 4}</span>
+                            <div className="w-12 h-12 rounded-2xl bg-brand-black border border-white/5 flex items-center justify-center font-bold text-white/20 text-sm group-hover:scale-110 group-hover:bg-brand-dark transition-all overflow-hidden">
                               {u.photo ? (
                                 <img src={u.photo} alt={u.firstName} className="w-full h-full object-cover" />
                               ) : (
@@ -441,16 +453,16 @@ const OperatorPanel: React.FC<OperatorPanelProps> = ({ user, state, addCheckIn, 
                               )}
                             </div>
                             <div>
-                              <p className="font-bold text-slate-900 flex items-center gap-2">
+                              <p className="font-bold text-white flex items-center gap-2">
                                 {u.firstName} {u.lastName}
-                                {u.id === user.id && <span className="text-[8px] bg-blue-600 text-white px-2 py-0.5 rounded-full uppercase tracking-tighter">Siz</span>}
+                                {u.id === user.id && <span className="text-[8px] bg-brand-gold text-brand-black px-2 py-0.5 rounded-full uppercase tracking-tighter">Siz</span>}
                               </p>
-                              <p className="text-[10px] font-medium text-slate-400">Operator</p>
+                              <p className="text-[10px] font-medium text-white/40">Operator</p>
                             </div>
                           </div>
                           <div className="text-right">
                             <p className="text-lg font-black text-slate-900">{u.monthlySales}</p>
-                            <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest">Oylik Sotuv</p>
+                            <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest">{t(language, 'monthly_sales')}</p>
                           </div>
                         </div>
                       ))
@@ -623,35 +635,35 @@ const OperatorPanel: React.FC<OperatorPanelProps> = ({ user, state, addCheckIn, 
           <div className="space-y-10 animate-in fade-in slide-in-from-bottom-5 duration-700">
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-6">
               {[
-                { name: 'Ucell', color: 'bg-purple-600', textColor: 'text-purple-600' },
-                { name: 'Mobiuz', color: 'bg-red-600', textColor: 'text-red-600' },
-                { name: 'Beeline', color: 'bg-yellow-400', textColor: 'text-yellow-600' },
-                { name: 'Uztelecom', color: 'bg-blue-500', textColor: 'text-blue-500' }
+                { name: 'Ucell', color: 'bg-[#9b51e0]', textColor: 'text-[#9b51e0]' },
+                { name: 'Uztelecom', color: 'bg-[#009ee0]', textColor: 'text-[#009ee0]' },
+                { name: 'Mobiuz', color: 'bg-[#eb1c24]', textColor: 'text-[#eb1c24]' },
+                { name: 'Beeline', color: 'bg-[#fdb913]', textColor: 'text-[#fdb913]' }
               ].map(company => (
-                <div key={company.name} className="bg-white p-6 rounded-[2.5rem] shadow-xl flex items-center gap-5 hover:scale-105 transition-transform duration-300">
-                  <div className={`w-12 h-12 ${company.color} rounded-2xl shadow-lg flex items-center justify-center text-white`}>
+                <div key={company.name} className="bg-brand-dark p-6 rounded-[2.5rem] shadow-xl flex items-center gap-5 hover:scale-105 transition-transform duration-300 border border-white/10">
+                  <div className={`w-12 h-12 ${company.color} rounded-2xl shadow-lg flex items-center justify-center text-white keep-white`}>
                     <Smartphone className="w-6 h-6" />
                   </div>
                   <div>
-                    <p className="text-[9px] font-black text-gray-400 uppercase tracking-widest mb-0.5">{company.name}</p>
+                    <p className="text-[9px] font-black text-white/30 uppercase tracking-widest mb-0.5">{company.name}</p>
                     <p className={`text-2xl font-black ${company.textColor}`}>{allTimeTotals[company.name]}</p>
                   </div>
                 </div>
               ))}
             </div>
 
-            <div className="bg-white p-10 rounded-[3rem] shadow-xl">
+            <div className="bg-brand-dark p-10 rounded-[3rem] shadow-xl border border-white/10">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-10 gap-6">
                 <div className="flex flex-col gap-2">
-                  <h2 className="text-2xl font-black text-gray-800 flex items-center gap-3"><Activity className="w-8 h-8 text-blue-600" /> Savdo Dinamikasi</h2>
+                  <h2 className="text-2xl font-black text-white flex items-center gap-3"><Activity className="w-8 h-8 text-brand-gold" /> Savdo Dinamikasi</h2>
                   <div className="flex flex-wrap gap-3 pl-11">
-                    {['Ucell', 'Mobiuz', 'Beeline', 'Uztelecom'].map(company => {
+                    {['Ucell', 'Uztelecom', 'Mobiuz', 'Beeline'].map(company => {
                       const count = periodTotals[company] || 0;
                       const styles: any = {
-                        'Ucell': 'text-purple-600 bg-purple-50 border-purple-100',
-                        'Mobiuz': 'text-red-600 bg-red-50 border-red-100',
-                        'Beeline': 'text-yellow-600 bg-yellow-50 border-yellow-100',
-                        'Uztelecom': 'text-blue-600 bg-blue-50 border-blue-100'
+                        'Ucell': 'text-[#9b51e0] bg-[#9b51e0]/10 border-[#9b51e0]/20',
+                        'Uztelecom': 'text-[#009ee0] bg-[#009ee0]/10 border-[#009ee0]/20',
+                        'Mobiuz': 'text-[#eb1c24] bg-[#eb1c24]/10 border-[#eb1c24]/20',
+                        'Beeline': 'text-[#fdb913] bg-[#fdb913]/10 border-[#fdb913]/20'
                       }[company];
                       return (
                         <span key={company} className={`text-[10px] font-black uppercase tracking-widest px-2 py-1 rounded-lg border ${styles}`}>
@@ -663,39 +675,39 @@ const OperatorPanel: React.FC<OperatorPanelProps> = ({ user, state, addCheckIn, 
                 </div>
                 
                 <div className="flex flex-wrap items-center gap-4">
-                  <div className="flex p-1 bg-gray-100 rounded-xl border border-gray-200">
+                  <div className="flex p-1 bg-brand-black rounded-xl border border-white/10">
                     <button 
                       onClick={() => setMonitoringTimeframe('week')}
-                      className={`px-4 py-2 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all ${monitoringTimeframe === 'week' ? 'bg-white text-blue-600 shadow-sm' : 'text-gray-400 hover:text-gray-600'}`}
+                      className={`px-4 py-2 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all ${monitoringTimeframe === 'week' ? 'bg-brand-gold text-brand-black shadow-sm' : 'text-white/40 hover:text-white'}`}
                     >
                       Hafta
                     </button>
                     <button 
                       onClick={() => setMonitoringTimeframe('month')}
-                      className={`px-4 py-2 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all ${monitoringTimeframe === 'month' ? 'bg-white text-blue-600 shadow-sm' : 'text-gray-400 hover:text-gray-600'}`}
+                      className={`px-4 py-2 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all ${monitoringTimeframe === 'month' ? 'bg-brand-gold text-brand-black shadow-sm' : 'text-white/40 hover:text-white'}`}
                     >
-                      Oy
+                      {t(language, 'month')}
                     </button>
                     <button 
                       onClick={() => setMonitoringTimeframe('year')}
-                      className={`px-4 py-2 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all ${monitoringTimeframe === 'year' ? 'bg-white text-blue-600 shadow-sm' : 'text-gray-400 hover:text-gray-600'}`}
+                      className={`px-4 py-2 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all ${monitoringTimeframe === 'year' ? 'bg-brand-gold text-brand-black shadow-sm' : 'text-white/40 hover:text-white'}`}
                     >
-                      Yil
+                      {t(language, 'yearly')}
                     </button>
                   </div>
 
-                  <div className="flex items-center gap-1 bg-gray-50 p-1 rounded-xl border border-gray-100">
+                  <div className="flex items-center gap-1 bg-brand-black p-1 rounded-xl border border-white/10">
                     <button 
                       onClick={() => {
                         if (monitoringTimeframe === 'week') setMonitoringWeekOffset(prev => prev - 1);
                         else if (monitoringTimeframe === 'month') setMonitoringMonthOffset(prev => prev - 1);
                         else if (monitoringTimeframe === 'year') setMonitoringYear(prev => prev - 1);
                       }}
-                      className="p-2 hover:bg-white hover:shadow-sm rounded-lg transition-all text-gray-400 hover:text-blue-600"
+                      className="p-2 hover:bg-white/5 hover:shadow-sm rounded-lg transition-all text-white/40 hover:text-brand-gold"
                     >
                       <ChevronLeft className="w-4 h-4" />
                     </button>
-                    <span className="text-[10px] font-black text-blue-600 px-3 uppercase tracking-widest min-w-[100px] text-center">
+                    <span className="text-[10px] font-black text-brand-gold px-3 uppercase tracking-widest min-w-[100px] text-center">
                       {currentPeriodLabel()}
                     </span>
                     <button 
@@ -704,7 +716,7 @@ const OperatorPanel: React.FC<OperatorPanelProps> = ({ user, state, addCheckIn, 
                         else if (monitoringTimeframe === 'month') setMonitoringMonthOffset(prev => prev + 1);
                         else if (monitoringTimeframe === 'year') setMonitoringYear(prev => prev + 1);
                       }}
-                      className="p-2 hover:bg-white hover:shadow-sm rounded-lg transition-all text-gray-400 hover:text-blue-600"
+                      className="p-2 hover:bg-white/5 hover:shadow-sm rounded-lg transition-all text-white/40 hover:text-brand-gold"
                     >
                       <ChevronRight className="w-4 h-4" />
                     </button>
@@ -714,7 +726,7 @@ const OperatorPanel: React.FC<OperatorPanelProps> = ({ user, state, addCheckIn, 
                       onClick={() => setSelectedDay(null)}
                       className="px-4 py-2 bg-blue-50 text-blue-600 rounded-xl text-[10px] font-black uppercase tracking-widest flex items-center gap-2 hover:bg-blue-100 transition shadow-sm focus:outline-none"
                     >
-                      <RotateCcw className="w-3.5 h-3.5" /> Bugunga qaytish
+                      <RotateCcw className="w-3.5 h-3.5" /> {t(language, 'back_to_today')}
                     </button>
                   )}
                 </div>
@@ -758,7 +770,7 @@ const OperatorPanel: React.FC<OperatorPanelProps> = ({ user, state, addCheckIn, 
                     />
                     <Bar 
                       dataKey="sales" 
-                      fill="#2563eb" 
+                      fill="var(--theme-gold)" 
                       radius={[12, 12, 0, 0]}
                       barSize={monitoringTimeframe === 'week' ? 80 : undefined}
                     />
@@ -767,25 +779,25 @@ const OperatorPanel: React.FC<OperatorPanelProps> = ({ user, state, addCheckIn, 
               </div>
             </div>
 
-            <div className="bg-white rounded-[3rem] shadow-xl border border-gray-100 overflow-hidden">
-              <div className="p-8 border-b border-gray-50 flex flex-col md:flex-row items-center justify-between bg-white gap-6">
+            <div className="bg-brand-dark rounded-[3rem] shadow-xl border border-white/10 overflow-hidden">
+              <div className="p-8 border-b border-white/5 flex flex-col md:flex-row items-center justify-between bg-brand-black gap-6">
                 <div className="flex items-center gap-4 w-full md:w-auto">
-                  <div className="p-3 bg-blue-50 rounded-2xl text-blue-600 shadow-sm"><Smartphone className="w-6 h-6" /></div>
-                  <h3 className="text-xl font-black text-gray-800 tracking-tight">
-                    {selectedDay || getTodayStr()} Kunlik Sotuvlar
+                  <div className="p-3 bg-brand-gold/10 rounded-2xl text-brand-gold shadow-sm"><Smartphone className="w-6 h-6" /></div>
+                  <h3 className="text-xl font-black text-white tracking-tight">
+                    {selectedDay || getTodayStr()} {t(language, 'daily_sales_title')}
                   </h3>
                 </div>
                 <div className="flex flex-wrap items-center gap-3 w-full md:w-auto justify-center md:justify-end">
                   {(() => {
                     const targetDate = selectedDay || getTodayStr();
                     const daySales = state.sales.filter(s => s.userId === user.id && s.date === targetDate);
-                    return ['Ucell', 'Mobiuz', 'Beeline', 'Uztelecom'].map(company => {
+                    return ['Ucell', 'Uztelecom', 'Mobiuz', 'Beeline'].map(company => {
                       const count = daySales.filter(s => s.company === company).reduce((acc, s) => acc + s.count + s.bonus, 0);
                       const styles: any = {
-                        'Ucell': 'bg-purple-50 text-purple-600 border-purple-100',
-                        'Mobiuz': 'bg-red-50 text-red-600 border-red-100',
-                        'Beeline': 'bg-yellow-50 text-yellow-700 border-yellow-100',
-                        'Uztelecom': 'bg-blue-50 text-blue-600 border-blue-100'
+                        'Ucell': 'bg-[#9b51e0]/10 text-[#9b51e0] border-[#9b51e0]/20',
+                        'Uztelecom': 'bg-[#009ee0]/10 text-[#009ee0] border-[#009ee0]/20',
+                        'Mobiuz': 'bg-[#eb1c24]/10 text-[#eb1c24] border-[#eb1c24]/20',
+                        'Beeline': 'bg-[#fdb913]/10 text-[#fdb913] border-[#fdb913]/20'
                       }[company];
                       return (
                         <div key={company} className={`px-4 py-2 rounded-xl border ${styles} text-[10px] font-black uppercase tracking-widest shadow-sm`}>
@@ -800,16 +812,16 @@ const OperatorPanel: React.FC<OperatorPanelProps> = ({ user, state, addCheckIn, 
                 <div className="overflow-x-auto">
                   <table className="w-full text-left border-collapse">
                     <thead>
-                      <tr className="bg-gray-50/50">
-                        <th className="px-8 py-5 text-[10px] font-black text-gray-400 uppercase tracking-widest border-b border-gray-100">Kompaniya</th>
-                        <th className="px-8 py-5 text-[10px] font-black text-gray-400 uppercase tracking-widest border-b border-gray-100">Tarif</th>
-                        <th className="px-8 py-5 text-[10px] font-black text-gray-400 uppercase tracking-widest border-b border-gray-100 text-center">Soni</th>
-                        <th className="px-8 py-5 text-[10px] font-black text-gray-400 uppercase tracking-widest border-b border-gray-100 text-center">Bonus</th>
-                        <th className="px-8 py-5 text-[10px] font-black text-gray-400 uppercase tracking-widest border-b border-gray-100 text-center">Jami</th>
-                        <th className="px-8 py-5 text-[10px] font-black text-gray-400 uppercase tracking-widest border-b border-gray-100 text-right">Vaqt</th>
+                      <tr className="bg-brand-black">
+                        <th className="px-8 py-5 text-[10px] font-black text-white/30 uppercase tracking-widest border-b border-white/5">Kompaniya</th>
+                        <th className="px-8 py-5 text-[10px] font-black text-white/30 uppercase tracking-widest border-b border-white/5">Tarif</th>
+                        <th className="px-8 py-5 text-[10px] font-black text-white/30 uppercase tracking-widest border-b border-white/5 text-center">Soni</th>
+                        <th className="px-8 py-5 text-[10px] font-black text-white/30 uppercase tracking-widest border-b border-white/5 text-center">Bonus</th>
+                        <th className="px-8 py-5 text-[10px] font-black text-white/30 uppercase tracking-widest border-b border-white/5 text-center">Jami</th>
+                        <th className="px-8 py-5 text-[10px] font-black text-white/30 uppercase tracking-widest border-b border-white/5 text-right">Vaqt</th>
                       </tr>
                     </thead>
-                    <tbody className="divide-y divide-gray-50">
+                    <tbody className="divide-y divide-white/5">
                       {(() => {
                         const targetDate = selectedDay || getTodayStr();
                         const daySales = state.sales.filter(s => s.userId === user.id && s.date === targetDate);
@@ -819,33 +831,36 @@ const OperatorPanel: React.FC<OperatorPanelProps> = ({ user, state, addCheckIn, 
                             <tr>
                               <td colSpan={6} className="px-8 py-20 text-center">
                                 <div className="flex flex-col items-center gap-4 opacity-40">
-                                  <div className="w-16 h-16 bg-gray-100 rounded-3xl flex items-center justify-center text-gray-400">
+                                  <div className="w-16 h-16 bg-white/5 rounded-3xl flex items-center justify-center text-white/20">
                                     <History className="w-8 h-8" />
                                   </div>
-                                  <p className="text-sm font-black text-gray-400 italic">Bu kunda hech nima sotilmagan</p>
+                                  <p className="text-sm font-black text-white/30 italic">Bu kunda hech nima sotilmagan</p>
                                 </div>
                               </td>
                             </tr>
                           );
                         }
 
-                        return daySales.sort((a, b) => b.timestamp - a.timestamp).map(sale => (
-                          <tr key={sale.id} className="hover:bg-gray-50/50 transition-colors group">
+                        return daySales.sort((a, b) => {
+                          const order = { 'Ucell': 1, 'Uztelecom': 2, 'Mobiuz': 3, 'Beeline': 4 };
+                          return (order[a.company as keyof typeof order] || 99) - (order[b.company as keyof typeof order] || 99) || b.timestamp.localeCompare(a.timestamp);
+                        }).map(sale => (
+                          <tr key={sale.id} className="hover:bg-white/5 transition-colors group">
                             <td className="px-8 py-5">
                               <span className={`px-3 py-1 rounded-lg text-[10px] font-black uppercase ${
-                                sale.company === 'Ucell' ? 'bg-purple-50 text-purple-600' :
-                                sale.company === 'Mobiuz' ? 'bg-red-50 text-red-600' :
-                                sale.company === 'Beeline' ? 'bg-yellow-50 text-yellow-700' :
-                                'bg-blue-50 text-blue-600'
+                                sale.company === 'Ucell' ? 'bg-[#9b51e0]/10 text-[#9b51e0]' :
+                                sale.company === 'Mobiuz' ? 'bg-[#eb1c24]/10 text-[#eb1c24]' :
+                                sale.company === 'Beeline' ? 'bg-[#fdb913]/10 text-[#fdb913]' :
+                                'bg-[#009ee0]/10 text-[#009ee0]'
                               }`}>
                                 {sale.company}
                               </span>
                             </td>
-                            <td className="px-8 py-5 font-bold text-gray-700">{sale.tariff}</td>
-                            <td className="px-8 py-5 text-center font-black text-gray-800">{sale.count}</td>
-                            <td className="px-8 py-5 text-center font-black text-green-600">+{sale.bonus}</td>
+                            <td className="px-8 py-5 font-bold text-white/70">{sale.tariff}</td>
+                            <td className="px-8 py-5 text-center font-black text-white">{sale.count}</td>
+                            <td className="px-8 py-5 text-center font-black text-green-500">+{sale.bonus}</td>
                             <td className="px-8 py-5 text-center">
-                              <span className="px-3 py-1 bg-gray-100 rounded-lg font-black text-gray-800 text-xs">
+                              <span className="px-3 py-1 bg-white/10 rounded-lg font-black text-white text-xs">
                                 {sale.count + sale.bonus}
                               </span>
                             </td>
@@ -865,49 +880,73 @@ const OperatorPanel: React.FC<OperatorPanelProps> = ({ user, state, addCheckIn, 
       }
       case 'simcards': {
         const companies = [
-          { name: 'Ucell', color: 'bg-purple-600', textColor: 'text-purple-600' },
-          { name: 'Mobiuz', color: 'bg-red-600', textColor: 'text-red-600' },
-          { name: 'Beeline', color: 'bg-yellow-400', textColor: 'text-yellow-600' },
-          { name: 'Uztelecom', color: 'bg-blue-500', textColor: 'text-blue-500' }
+          { name: 'Ucell', color: 'bg-[#9b51e0]', textColor: 'text-[#9b51e0]' },
+          { name: 'Uztelecom', color: 'bg-[#009ee0]', textColor: 'text-[#009ee0]' },
+          { name: 'Mobiuz', color: 'bg-[#eb1c24]', textColor: 'text-[#eb1c24]' },
+          { name: 'Beeline', color: 'bg-[#fdb913]', textColor: 'text-[#fdb913]' }
         ];
 
         const totalInventory = Object.values(user.inventory || {}).reduce((sum: number, count: number) => sum + count, 0);
 
         return (
           <div className="space-y-10 animate-in fade-in slide-in-from-bottom-5 duration-700">
-            <div className="bg-white p-10 rounded-[3rem] shadow-xl border border-gray-100">
+            <div className="bg-brand-dark p-10 rounded-[3rem] shadow-xl border border-white/10">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-10 gap-6">
-                <h2 className="text-2xl font-black text-gray-800 flex items-center gap-3"><Smartphone className="w-8 h-8 text-indigo-600" /> Simkartalar Ombori</h2>
+                <h2 className="text-2xl font-black text-white flex items-center gap-3"><Smartphone className="w-8 h-8 text-brand-gold" /> {t(language, 'sim_inventory')}</h2>
                 <div className="flex items-center gap-4">
-                  <div className="flex items-center gap-2 px-4 py-2 bg-indigo-50 rounded-2xl border border-indigo-100">
-                    <span className="text-[10px] font-black text-indigo-600 uppercase tracking-widest">Jami: {totalInventory} dona</span>
+                  <div className="flex items-center gap-2 px-4 py-2 bg-brand-gold/10 rounded-2xl border border-brand-gold/20">
+                    <span className="text-[10px] font-black text-brand-gold uppercase tracking-widest">Jami: {totalInventory} dona</span>
                   </div>
                 </div>
               </div>
 
               {showSimEntryForm && (
-                <div className="mb-10 p-8 bg-indigo-50/50 rounded-[2.5rem] border border-indigo-100 animate-in slide-in-from-top duration-300">
+                <div className="mb-10 p-8 bg-brand-black rounded-[2.5rem] border border-white/10 animate-in slide-in-from-top duration-300">
                   <div className="flex items-center justify-between mb-6">
-                    <h3 className="text-lg font-black text-indigo-900">Yangi simkarta kiritish</h3>
-                    <button onClick={() => setShowSimEntryForm(false)} className="p-2 text-gray-400 hover:text-red-500 transition"><X className="w-5 h-5" /></button>
+                    <h3 className="text-lg font-black text-white">Yangi simkarta kiritish</h3>
+                    <button onClick={() => setShowSimEntryForm(false)} className="p-2 text-white/30 hover:text-red-500 transition"><X className="w-5 h-5" /></button>
                   </div>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
                     <div className="space-y-1.5">
-                      <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest pl-2">Kompaniya</label>
-                      <select 
-                        className="w-full p-4 border border-gray-200 rounded-2xl bg-white text-sm font-bold outline-none focus:border-indigo-600 transition"
-                        value={newSimEntry.company}
-                        onChange={e => setNewSimEntry({...newSimEntry, company: e.target.value})}
-                      >
-                        {companies.map(c => <option key={c.name}>{c.name}</option>)}
-                      </select>
+                      <label className="text-[10px] font-black text-white/30 uppercase tracking-widest pl-2">Kompaniya</label>
+                      <div className="relative">
+                        <button
+                          type="button"
+                          onClick={() => setOpenDropdown(openDropdown === 'simCompany' ? null : 'simCompany')}
+                          className="w-full p-4 pr-10 border border-white/10 rounded-2xl bg-brand-black text-sm font-bold outline-none focus:border-brand-gold transition text-white text-left flex items-center justify-between shadow-inner"
+                        >
+                          <span>{newSimEntry.company}</span>
+                          <ChevronDown className={`w-5 h-5 text-white/40 transition-transform ${openDropdown === 'simCompany' ? 'rotate-180' : ''}`} />
+                        </button>
+                        
+                        {openDropdown === 'simCompany' && (
+                          <>
+                            <div className="fixed inset-0 z-10" onClick={() => setOpenDropdown(null)}></div>
+                            <div className="absolute top-full left-0 right-0 mt-2 bg-brand-black border border-white/10 rounded-2xl shadow-2xl z-20 overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+                              {companies.map((c) => (
+                                <button
+                                  type="button"
+                                  key={c.name}
+                                  onClick={() => {
+                                    setNewSimEntry({...newSimEntry, company: c.name});
+                                    setOpenDropdown(null);
+                                  }}
+                                  className={`w-full text-left p-4 text-sm font-bold hover:bg-white/5 transition-colors ${newSimEntry.company === c.name ? 'text-brand-gold bg-brand-gold/10' : 'text-white'}`}
+                                >
+                                  {c.name}
+                                </button>
+                              ))}
+                            </div>
+                          </>
+                        )}
+                      </div>
                     </div>
                     <div className="space-y-1.5">
-                      <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest pl-2">Soni (dona)</label>
+                      <label className="text-[10px] font-black text-white/30 uppercase tracking-widest pl-2">Soni (dona)</label>
                       <input 
                         type="number" 
                         min="1"
-                        className="w-full p-4 border border-gray-200 rounded-2xl bg-white text-sm font-bold outline-none focus:border-indigo-600 transition"
+                        className="w-full p-4 border border-white/10 rounded-2xl bg-brand-black text-white text-sm font-bold outline-none focus:border-brand-gold transition shadow-inner"
                         value={newSimEntry.count}
                         onChange={e => setNewSimEntry({...newSimEntry, count: e.target.value})}
                       />
@@ -928,7 +967,7 @@ const OperatorPanel: React.FC<OperatorPanelProps> = ({ user, state, addCheckIn, 
                     </button>
                     <button 
                       onClick={() => setShowSimEntryForm(false)}
-                      className="px-10 py-5 bg-white border border-gray-200 text-gray-400 rounded-2xl font-black uppercase tracking-widest text-[10px]"
+                      className="px-10 py-5 bg-brand-black border border-white/10 text-white/40 rounded-2xl font-black uppercase tracking-widest text-[10px] hover:bg-white/5 transition-all"
                     >
                       Bekor qilish
                     </button>
@@ -941,27 +980,27 @@ const OperatorPanel: React.FC<OperatorPanelProps> = ({ user, state, addCheckIn, 
                   const count = user.inventory?.[company.name] || 0;
                   const percentage = Math.min(100, (count / 200) * 100); // Assuming 200 is full capacity for visualization
                   return (
-                    <div key={company.name} className="p-8 bg-white rounded-[2.5rem] border border-gray-100 shadow-sm hover:shadow-xl hover:-translate-y-1 transition-all duration-500 group">
+                    <div key={company.name} className="p-8 bg-brand-dark rounded-[2.5rem] border border-white/10 shadow-sm hover:shadow-xl hover:-translate-y-1 transition-all duration-500 group">
                       <div className="flex items-center justify-between mb-6">
-                        <div className={`w-14 h-14 ${company.color} rounded-2xl shadow-lg flex items-center justify-center text-white group-hover:rotate-12 transition-transform`}>
+                        <div className={`w-14 h-14 ${company.color} rounded-2xl shadow-lg flex items-center justify-center text-white keep-white group-hover:rotate-12 transition-transform`}>
                           <Smartphone className="w-7 h-7" />
                         </div>
                         <div className="text-right">
-                          <p className={`text-3xl font-black ${company.textColor}`}>{count}</p>
-                          <p className="text-[9px] font-black text-gray-400 uppercase tracking-widest">Mavjud</p>
+                          <p className={`text-3xl font-black ${company.textColor}`}>{formatLargeNumber(count)}</p>
+                          <p className="text-[9px] font-black text-white/30 uppercase tracking-widest">Mavjud</p>
                         </div>
                       </div>
                       <div className="space-y-4">
                         <div className="flex items-center justify-between">
-                          <h3 className="font-black text-gray-500 text-lg">{company.name}</h3>
-                          <span className={`text-[10px] font-bold px-2 py-1 rounded-lg ${count > 0 ? 'text-green-500 bg-green-50' : 'text-red-500 bg-red-50'}`}>
-                            {count > 0 ? 'Sotuvda bor' : 'Tugagan'}
+                          <h3 className="font-black text-white/60 text-lg">{company.name}</h3>
+                          <span className={`text-[10px] font-bold px-2 py-1 rounded-lg ${count > 0 ? 'text-green-500 bg-green-500/10' : 'text-red-500 bg-red-500/10'}`}>
+                            {count > 0 ? t(language, 'in_stock') : t(language, 'out_of_stock_status')}
                           </span>
                         </div>
-                        <div className="w-full bg-gray-100 h-1.5 rounded-full overflow-hidden">
+                        <div className="w-full bg-brand-black h-1.5 rounded-full overflow-hidden border border-white/5">
                           <div className={`h-full ${company.color} rounded-full transition-all duration-1000`} style={{ width: `${percentage}%` }}></div>
                         </div>
-                        <div className="flex justify-between text-[9px] font-black text-gray-400 uppercase tracking-widest">
+                        <div className="flex justify-between text-[9px] font-black text-white/30 uppercase tracking-widest">
                           <span>Zaxira holati</span>
                           <span>{Math.round(percentage)}%</span>
                         </div>
@@ -972,19 +1011,19 @@ const OperatorPanel: React.FC<OperatorPanelProps> = ({ user, state, addCheckIn, 
               </div>
             </div>
 
-            <div className="bg-indigo-900 p-10 rounded-[3rem] shadow-xl text-white relative overflow-hidden">
-              <div className="absolute top-0 right-0 w-64 h-64 bg-white/5 rounded-full -mr-20 -mt-20 blur-3xl"></div>
+            <div className="bg-brand-dark p-10 rounded-[3rem] shadow-xl text-white relative overflow-hidden border border-white/10">
+              <div className="absolute top-0 right-0 w-64 h-64 bg-brand-gold/5 rounded-full -mr-20 -mt-20 blur-3xl"></div>
               <div className="relative z-10 flex flex-col md:flex-row items-center justify-between gap-8">
                 <div className="space-y-4 max-w-xl">
-                  <h3 className="text-2xl font-black tracking-tight">Simkartalar yetishmayaptimi?</h3>
-                  <p className="text-indigo-100 text-sm font-medium leading-relaxed">Agar omboringizda simkartalar kamayib qolgan bo'lsa, menejerga so'rov yuboring. Yangi partiya 24 soat ichida yetkazib beriladi.</p>
+                  <h3 className="text-2xl font-black tracking-tight text-brand-gold uppercase">Simkartalar yetishmayaptimi?</h3>
+                  <p className="text-white/60 text-sm font-medium leading-relaxed">Agar omboringizda simkartalar kamayib qolgan bo'lsa, menejerga so'rov yuboring. Yangi partiya 24 soat ichida yetkazib beriladi.</p>
                 </div>
                 <button 
                   onClick={() => {
                     setIsSimRequestModalOpen(true);
                     setSimRequestText('');
                   }}
-                  className="px-10 py-5 bg-white text-indigo-900 rounded-[2rem] font-black uppercase tracking-widest text-[10px] shadow-2xl hover:bg-indigo-50 active:scale-95 transition-all whitespace-nowrap"
+                  className="px-10 py-5 gold-gradient text-brand-black rounded-[2rem] font-black uppercase tracking-widest text-[10px] shadow-2xl hover:scale-105 active:scale-95 transition-all whitespace-nowrap"
                 >
                   So'rov yuborish
                 </button>
@@ -994,27 +1033,27 @@ const OperatorPanel: React.FC<OperatorPanelProps> = ({ user, state, addCheckIn, 
             {isSimRequestModalOpen && (
               <div className="fixed inset-0 z-[150] flex items-center justify-center p-4 animate-in fade-in duration-300">
                 <div className="absolute inset-0 bg-gray-900/60 backdrop-blur-md" onClick={() => setIsSimRequestModalOpen(false)}></div>
-                <div className="bg-white w-full max-w-lg rounded-[2.5rem] shadow-2xl relative z-10 overflow-hidden animate-in zoom-in-95 duration-300">
-                  <div className="p-8 border-b border-gray-100 flex items-center justify-between bg-gradient-to-br from-indigo-50 to-blue-50/30">
+                <div className="bg-brand-dark w-full max-w-lg rounded-[2.5rem] shadow-2xl relative z-10 overflow-hidden animate-in zoom-in-95 duration-300 border border-white/10">
+                  <div className="p-8 border-b border-white/5 flex items-center justify-between bg-brand-black">
                     <div className="flex items-center gap-3">
-                      <div className="p-3 bg-indigo-600 text-white rounded-2xl shadow-lg shadow-indigo-100">
+                      <div className="p-3 bg-brand-gold text-brand-black rounded-2xl shadow-lg">
                         <Smartphone className="w-5 h-5" />
                       </div>
                       <div>
-                        <h3 className="text-xl font-black text-gray-800 tracking-tight">Simkarta so'rovi</h3>
-                        <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mt-0.5">Menejerga so'rov yuborish</p>
+                        <h3 className="text-xl font-black text-white tracking-tight">Simkarta so'rovi</h3>
+                        <p className="text-[10px] font-black text-white/30 uppercase tracking-widest mt-0.5">Menejerga so'rov yuborish</p>
                       </div>
                     </div>
-                    <button onClick={() => setIsSimRequestModalOpen(false)} className="p-2 bg-white rounded-xl text-gray-400 hover:text-gray-900 transition shadow-sm border border-gray-100">
+                    <button onClick={() => setIsSimRequestModalOpen(false)} className="p-2 bg-brand-black rounded-xl text-white/40 hover:text-white transition shadow-sm border border-white/10">
                       <X className="w-5 h-5" />
                     </button>
                   </div>
                   
                   <div className="p-8 space-y-6">
                     <div>
-                      <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest block mb-2 ml-1">So'rov matni</label>
+                      <label className="text-[10px] font-black text-white/30 uppercase tracking-widest block mb-2 ml-1">So'rov matni</label>
                       <textarea 
-                        className="w-full p-6 bg-gray-50 border border-gray-100 rounded-[2rem] text-sm font-medium text-gray-800 focus:ring-2 focus:ring-indigo-500 outline-none transition shadow-inner"
+                        className="w-full p-6 bg-brand-black border border-white/10 rounded-[2rem] text-sm font-medium text-white focus:border-brand-gold outline-none transition shadow-inner"
                         rows={4}
                         placeholder="Qaysi simkartalar va qancha kerakligini yozing..."
                         value={simRequestText}
@@ -1054,29 +1093,29 @@ const OperatorPanel: React.FC<OperatorPanelProps> = ({ user, state, addCheckIn, 
             {isSendMessageModalOpen && (
               <div className="fixed inset-0 z-[150] flex items-center justify-center p-4 animate-in fade-in duration-300">
                 <div className="absolute inset-0 bg-gray-900/60 backdrop-blur-md" onClick={() => setIsSendMessageModalOpen(false)}></div>
-                <div className="bg-white w-full max-w-lg rounded-[2.5rem] shadow-2xl relative z-10 overflow-hidden animate-in zoom-in-95 duration-300">
-                  <div className="p-8 border-b border-gray-100 flex items-center justify-between bg-gradient-to-br from-blue-50 to-indigo-50/30">
+                <div className="bg-brand-dark w-full max-w-lg rounded-[2.5rem] shadow-2xl relative z-10 overflow-hidden animate-in zoom-in-95 duration-300 border border-white/10">
+                  <div className="p-8 border-b border-white/5 flex items-center justify-between bg-brand-black">
                     <div className="flex items-center gap-3">
-                      <div className="p-3 bg-blue-600 text-white rounded-2xl shadow-lg shadow-blue-100">
+                      <div className="p-3 bg-brand-gold text-brand-black rounded-2xl shadow-lg">
                         <Send className="w-5 h-5" />
                       </div>
                       <div>
-                        <h3 className="text-xl font-black text-gray-800 tracking-tight">Xabar yuborish</h3>
-                        <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mt-0.5">Menejerga xabar yozish</p>
+                        <h3 className="text-xl font-black text-white tracking-tight">{t(language, 'send_message')}</h3>
+                        <p className="text-[10px] font-black text-white/30 uppercase tracking-widest mt-0.5">{t(language, 'write_to_manager')}</p>
                       </div>
                     </div>
-                    <button onClick={() => setIsSendMessageModalOpen(false)} className="p-2 bg-white rounded-xl text-gray-400 hover:text-gray-900 transition shadow-sm border border-gray-100">
+                    <button onClick={() => setIsSendMessageModalOpen(false)} className="p-2 bg-brand-black rounded-xl text-white/40 hover:text-white transition shadow-sm border border-white/10">
                       <X className="w-5 h-5" />
                     </button>
                   </div>
                   
                   <div className="p-8 space-y-6">
                     <div>
-                      <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest block mb-2 ml-1">Xabar matni</label>
+                      <label className="text-[10px] font-black text-white/30 uppercase tracking-widest block mb-2 ml-1">{t(language, 'message_text')}</label>
                       <textarea 
-                        className="w-full p-6 bg-gray-50 border border-gray-100 rounded-[2rem] text-sm font-medium text-gray-800 focus:ring-2 focus:ring-blue-500 outline-none transition shadow-inner"
+                        className="w-full p-6 bg-brand-black border border-white/10 rounded-[2rem] text-sm font-medium text-white focus:border-brand-gold outline-none transition shadow-inner"
                         rows={4}
-                        placeholder="Xabaringizni yozing..."
+                        placeholder={t(language, 'type_message')}
                         value={messageText}
                         onChange={(e) => setMessageText(e.target.value)}
                         autoFocus
@@ -1091,25 +1130,25 @@ const OperatorPanel: React.FC<OperatorPanelProps> = ({ user, state, addCheckIn, 
                         setMessageText('');
                         alert("Xabar muvaffaqiyatli yuborildi!");
                       }}
-                      className="w-full py-5 bg-blue-600 text-white rounded-[2rem] font-black uppercase tracking-widest text-[10px] shadow-xl shadow-blue-100 hover:bg-blue-700 active:scale-95 transition-all flex items-center justify-center gap-3"
+                      className="w-full py-5 gold-gradient text-brand-black rounded-[2rem] font-black uppercase tracking-widest text-[10px] shadow-xl shadow-brand-gold/20 hover:scale-[1.02] active:scale-95 transition-all flex items-center justify-center gap-3"
                     >
-                      Xabarni yuborish <Send className="w-4 h-4" />
+                      {t(language, 'send_message')} <Send className="w-4 h-4" />
                     </button>
                   </div>
                 </div>
               </div>
             )}
             <div className="flex items-center justify-between mb-8">
-              <h2 className="text-3xl font-black text-gray-800 tracking-tight">Xabarlar Markazi</h2>
+              <h2 className="text-3xl font-black text-gray-800 tracking-tight">{t(language, 'message_center')}</h2>
               <button 
                 onClick={() => {
                   setIsSendMessageModalOpen(true);
                   setMessageText('');
                 }}
-                className="px-6 py-3 bg-blue-600 text-white rounded-2xl font-black uppercase tracking-widest text-[10px] shadow-xl shadow-blue-100 hover:bg-blue-700 active:scale-95 transition-all flex items-center gap-2"
+                className="px-6 py-3 gold-gradient text-brand-black rounded-2xl font-black uppercase tracking-widest text-[10px] shadow-xl shadow-brand-gold/20 hover:scale-105 active:scale-95 transition-all flex items-center gap-2"
               >
                 <Send className="w-4 h-4" />
-                Xabar yuborish
+                {t(language, 'send_message')}
               </button>
             </div>
 
@@ -1118,34 +1157,34 @@ const OperatorPanel: React.FC<OperatorPanelProps> = ({ user, state, addCheckIn, 
                 myMessages.map(m => (
                   <div 
                     key={m.id} 
-                    className={`p-6 rounded-[2.5rem] border transition-all relative ${m.isRead || m.senderId === user.id ? 'bg-white border-gray-100' : 'bg-blue-50 border-blue-200 shadow-lg shadow-blue-100/50'}`}
+                    className={`p-6 rounded-[2.5rem] border transition-all relative ${m.isRead || m.senderId === user.id ? 'bg-brand-dark border-white/10' : 'bg-brand-gold/5 border-brand-gold/20 shadow-lg shadow-brand-gold/5'}`}
                     onClick={() => !m.isRead && m.senderId !== user.id && markMessageAsRead(m.id)}
                   >
                     <div className="flex justify-between items-start mb-4">
                       <div className="flex items-center gap-3">
-                        <div className={`w-10 h-10 rounded-xl flex items-center justify-center font-black text-xs ${m.senderId === user.id ? 'bg-blue-600 text-white' : 'bg-indigo-600 text-white'}`}>
+                        <div className={`w-10 h-10 rounded-xl flex items-center justify-center font-black text-xs ${m.senderId === user.id ? 'bg-brand-gold text-brand-black' : 'bg-white/10 text-white'}`}>
                           {m.senderName[0]}
                         </div>
                         <div>
-                          <h4 className="font-black text-gray-800 text-sm">
+                          <h4 className="font-black text-white text-sm">
                             {m.senderName}
-                            {m.recipientId === 'all' && <span className="text-[8px] bg-blue-100 text-blue-600 px-2 py-0.5 rounded-full ml-2 uppercase tracking-widest">Barchaga</span>}
+                            {m.recipientId === 'all' && <span className="text-[8px] bg-brand-gold/10 text-brand-gold px-2 py-0.5 rounded-full ml-2 uppercase tracking-widest">Barchaga</span>}
                           </h4>
-                          <p className="text-[10px] text-gray-400 font-bold">{new Date(m.timestamp).toLocaleString()}</p>
+                          <p className="text-[10px] text-white/30 font-bold">{new Date(m.timestamp).toLocaleString()}</p>
                         </div>
                       </div>
-                      {!m.isRead && m.senderId !== user.id && <span className="px-2 py-1 bg-blue-600 text-white text-[8px] font-black rounded-md uppercase tracking-widest">Yangi</span>}
+                      {!m.isRead && m.senderId !== user.id && <span className="px-2 py-1 bg-brand-gold text-brand-black text-[8px] font-black rounded-md uppercase tracking-widest">Yangi</span>}
                     </div>
-                    <p className="text-gray-700 font-medium leading-relaxed pl-1">{m.text}</p>
+                    <p className="text-white/70 font-medium leading-relaxed pl-1">{m.text}</p>
                   </div>
                 ))
               ) : (
-                <div className="bg-white rounded-[3rem] p-20 text-center border border-gray-100 shadow-sm">
-                  <div className="w-20 h-20 bg-gray-50 rounded-full flex items-center justify-center mx-auto mb-6 text-gray-200">
+                <div className="bg-brand-dark rounded-[3rem] p-20 text-center border border-white/10 shadow-sm">
+                  <div className="w-20 h-20 bg-brand-black rounded-full flex items-center justify-center mx-auto mb-6 text-white/10">
                     <Send className="w-10 h-10" />
                   </div>
-                  <h3 className="text-xl font-black text-gray-800 mb-2">Xabarlar mavjud emas</h3>
-                  <p className="text-gray-400 font-medium">Menejer tomonidan yuborilgan xabarlar shu yerda ko'rinadi.</p>
+                  <h3 className="text-xl font-black text-white mb-2">{t(language, 'no_messages')}</h3>
+                  <p className="text-white/40 font-medium">{t(language, 'manager_messages_desc')}</p>
                 </div>
               )}
             </div>
@@ -1161,17 +1200,16 @@ const OperatorPanel: React.FC<OperatorPanelProps> = ({ user, state, addCheckIn, 
           <div className="max-w-5xl mx-auto py-8 px-4 space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-700">
             
             {/* Profile Header Card */}
-            <div className="bg-white rounded-[3rem] p-8 shadow-2xl border border-gray-100 relative overflow-hidden group">
-              <div className="absolute top-0 right-0 w-96 h-96 bg-blue-50 rounded-full blur-3xl -mr-20 -mt-20 transition-all group-hover:bg-blue-100/50"></div>
-              <div className="absolute bottom-0 left-0 w-64 h-64 bg-indigo-50 rounded-full blur-3xl -ml-20 -mb-20 transition-all group-hover:bg-indigo-100/50"></div>
+            <div className="bg-brand-dark rounded-[3rem] p-8 shadow-2xl border border-white/10 relative overflow-hidden group">
+              <div className="absolute top-0 right-0 w-96 h-96 bg-brand-gold/5 rounded-full blur-3xl -mr-20 -mt-20 transition-all group-hover:bg-brand-gold/10"></div>
               
               <div className="relative z-10 flex flex-col md:flex-row items-center gap-8">
                 <div className="relative">
-                  <div className="w-40 h-40 rounded-[2.5rem] bg-white p-2 shadow-xl shadow-blue-100">
+                  <div className="w-40 h-40 rounded-[2.5rem] bg-brand-black p-2 shadow-xl border border-white/5">
                     {user.photo ? (
                       <img src={user.photo} alt="Profile" className="w-full h-full rounded-[2rem] object-cover" />
                     ) : (
-                      <div className="w-full h-full rounded-[2rem] bg-gradient-to-br from-blue-100 to-indigo-100 flex items-center justify-center text-5xl font-black text-blue-600">
+                      <div className="w-full h-full rounded-[2rem] bg-brand-gold/10 flex items-center justify-center text-5xl font-black text-brand-gold">
                         {user.firstName?.[0]}{user.lastName?.[0]}
                       </div>
                     )}
@@ -1187,7 +1225,7 @@ const OperatorPanel: React.FC<OperatorPanelProps> = ({ user, state, addCheckIn, 
                       });
                       setIsEditingProfile(true);
                     }}
-                    className="absolute -bottom-2 -right-2 p-3 bg-blue-600 text-white rounded-2xl shadow-lg hover:bg-blue-700 hover:scale-110 transition-all active:scale-95 group"
+                    className="absolute -bottom-2 -right-2 p-3 bg-brand-gold text-brand-black rounded-2xl shadow-lg hover:scale-110 transition-all active:scale-95 group"
                   >
                     <Edit3 className="w-5 h-5" />
                   </button>
@@ -1195,17 +1233,17 @@ const OperatorPanel: React.FC<OperatorPanelProps> = ({ user, state, addCheckIn, 
 
                 <div className="text-center md:text-left space-y-3 flex-1">
                   <div>
-                    <h2 className="text-4xl font-black text-gray-800 tracking-tight">{user.firstName} {user.lastName}</h2>
-                    <p className="text-gray-400 font-bold uppercase tracking-widest text-xs mt-1">{user.role}</p>
+                    <h2 className="text-4xl font-black text-white tracking-tight">{user.firstName} {user.lastName}</h2>
+                    <p className="text-brand-gold font-bold uppercase tracking-widest text-xs mt-1">{user.role}</p>
                   </div>
                   
                   <div className="flex flex-wrap justify-center md:justify-start gap-3">
-                    <div className="px-4 py-2 bg-gray-50 rounded-xl border border-gray-100 flex items-center gap-2 text-gray-600 font-bold text-xs">
-                      <Smartphone className="w-4 h-4 text-blue-500" />
+                    <div className="px-4 py-2 bg-brand-black rounded-xl border border-white/10 flex items-center gap-2 text-white/60 font-bold text-xs">
+                      <Smartphone className="w-4 h-4 text-brand-gold" />
                       {user.phone}
                     </div>
-                    <div className="px-4 py-2 bg-gray-50 rounded-xl border border-gray-100 flex items-center gap-2 text-gray-600 font-bold text-xs">
-                      <Calendar className="w-4 h-4 text-indigo-500" />
+                    <div className="px-4 py-2 bg-brand-black rounded-xl border border-white/10 flex items-center gap-2 text-white/60 font-bold text-xs">
+                      <Calendar className="w-4 h-4 text-brand-gold" />
                       {joinDate}
                     </div>
                   </div>
@@ -1215,32 +1253,32 @@ const OperatorPanel: React.FC<OperatorPanelProps> = ({ user, state, addCheckIn, 
 
             {/* Stats Grid */}
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-              {['Ucell', 'Mobiuz', 'Beeline', 'Uztelecom'].map(company => {
+              {['Ucell', 'Uztelecom', 'Mobiuz', 'Beeline'].map(company => {
                 const count = state.sales
                   .filter(s => s.userId === user.id && s.company === company)
                   .reduce((acc, s) => acc + s.count + s.bonus, 0);
                 
                 const styles = {
-                  'Ucell': { bg: 'bg-purple-600', text: 'text-purple-100', icon: 'text-purple-600' },
-                  'Mobiuz': { bg: 'bg-red-600', text: 'text-red-100', icon: 'text-red-600' },
-                  'Beeline': { bg: 'bg-yellow-500', text: 'text-yellow-100', icon: 'text-yellow-600' },
-                  'Uztelecom': { bg: 'bg-blue-600', text: 'text-blue-100', icon: 'text-blue-600' }
-                }[company] || { bg: 'bg-gray-600', text: 'text-gray-100', icon: 'text-gray-600' };
+                  'Ucell': { bg: 'bg-[#9b51e0]/10', border: 'border-[#9b51e0]/20', text: 'text-[#9b51e0]', icon: 'text-[#9b51e0]' },
+                  'Uztelecom': { bg: 'bg-[#009ee0]/10', border: 'border-[#009ee0]/20', text: 'text-[#009ee0]', icon: 'text-[#009ee0]' },
+                  'Mobiuz': { bg: 'bg-[#eb1c24]/10', border: 'border-[#eb1c24]/20', text: 'text-[#eb1c24]', icon: 'text-[#eb1c24]' },
+                  'Beeline': { bg: 'bg-[#fdb913]/10', border: 'border-[#fdb913]/20', text: 'text-[#fdb913]', icon: 'text-[#fdb913]' }
+                }[company] || { bg: 'bg-white/5', border: 'border-white/10', text: 'text-white/70', icon: 'text-white/30' };
 
                 return (
-                  <div key={company} className={`${styles.bg} p-6 rounded-[2.5rem] shadow-xl relative overflow-hidden group hover:-translate-y-1 transition-all duration-300`}>
-                    <div className="absolute top-0 right-0 w-24 h-24 bg-white/10 rounded-full -mr-8 -mt-8 blur-2xl group-hover:bg-white/20 transition-all"></div>
+                  <div key={company} className={`bg-brand-dark border ${styles.border} p-6 rounded-[2.5rem] shadow-xl relative overflow-hidden group hover:-translate-y-1 transition-all duration-300`}>
+                    <div className={`absolute top-0 right-0 w-32 h-32 ${styles.bg} rounded-full -mr-12 -mt-12 blur-3xl group-hover:scale-110 transition-transform`}></div>
                     
                     <div className="relative z-10 flex flex-col h-full justify-between gap-4">
                       <div className="flex justify-between items-start">
-                        <div className="p-3 bg-white rounded-2xl shadow-sm">
+                        <div className={`p-3 ${styles.bg} rounded-2xl shadow-sm border ${styles.border}`}>
                           <Smartphone className={`w-6 h-6 ${styles.icon}`} />
                         </div>
                         <span className={`text-[10px] font-black uppercase tracking-widest ${styles.text} opacity-80`}>{company}</span>
                       </div>
                       <div>
                         <p className="text-4xl font-black text-white tracking-tight">{count}</p>
-                        <p className={`text-[10px] font-bold ${styles.text} mt-1`}>Simkarta sotildi</p>
+                        <p className={`text-[10px] font-bold text-white/40 mt-1`}>Simkarta sotildi</p>
                       </div>
                     </div>
                   </div>
@@ -1249,25 +1287,25 @@ const OperatorPanel: React.FC<OperatorPanelProps> = ({ user, state, addCheckIn, 
             </div>
 
             {isEditingProfile && (
-              <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-in fade-in duration-300">
-                <div className="bg-white rounded-[2.5rem] p-8 max-w-md w-full shadow-2xl animate-in zoom-in-95 duration-300">
-                  <div className="flex items-center justify-between mb-6">
-                    <h3 className="text-xl font-black text-gray-800">Profilni tahrirlash</h3>
-                    <button onClick={() => setIsEditingProfile(false)} className="p-2 hover:bg-gray-100 rounded-full transition"><X className="w-5 h-5 text-gray-400" /></button>
+              <div className="fixed inset-0 bg-black/80 backdrop-blur-md z-[150] flex items-center justify-center p-4 animate-in fade-in duration-300">
+                <div className="bg-brand-dark rounded-[2.5rem] p-8 max-w-md w-full shadow-2xl animate-in zoom-in-95 duration-300 border border-white/10">
+                  <div className="flex items-center justify-between mb-8">
+                    <h3 className="text-xl font-black text-white uppercase tracking-tight">{t(language, 'edit_profile')}</h3>
+                    <button onClick={() => setIsEditingProfile(false)} className="p-2 hover:bg-white/5 rounded-full transition"><X className="w-5 h-5 text-white/40" /></button>
                   </div>
-                  <div className="space-y-4">
-                    <div className="flex justify-center mb-6">
+                  <div className="space-y-6">
+                    <div className="flex justify-center mb-8">
                       <div className="relative group cursor-pointer" onClick={() => profilePhotoInputRef.current?.click()}>
-                        <div className="w-24 h-24 rounded-full bg-gray-100 overflow-hidden border-4 border-white shadow-lg">
+                        <div className="w-24 h-24 rounded-full bg-brand-black overflow-hidden border-4 border-brand-dark shadow-lg">
                           {profileForm.photo ? (
                             <img src={profileForm.photo} alt="Profile Preview" className="w-full h-full object-cover" />
                           ) : (
-                            <div className="w-full h-full flex items-center justify-center text-gray-400">
+                            <div className="w-full h-full flex items-center justify-center text-white/20">
                               <Camera className="w-8 h-8" />
                             </div>
                           )}
                         </div>
-                        <div className="absolute inset-0 bg-black/30 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                        <div className="absolute inset-0 bg-brand-gold/20 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
                           <Upload className="w-6 h-6 text-white" />
                         </div>
                         <input 
@@ -1279,41 +1317,41 @@ const OperatorPanel: React.FC<OperatorPanelProps> = ({ user, state, addCheckIn, 
                         />
                       </div>
                     </div>
-                    <div className="space-y-1">
-                      <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest pl-2">Ism</label>
+                    <div className="space-y-1.5">
+                      <label className="text-[10px] font-black text-white/30 uppercase tracking-widest ml-4">Ism</label>
                       <input 
                         type="text" 
                         value={profileForm.firstName} 
                         onChange={e => setProfileForm({...profileForm, firstName: e.target.value})}
-                        className="w-full p-4 border border-gray-200 rounded-2xl bg-gray-50 focus:bg-white outline-none focus:ring-2 focus:ring-blue-500 transition font-bold text-gray-800"
+                        className="w-full p-4 border border-white/10 rounded-2xl bg-brand-black focus:bg-brand-dark outline-none focus:border-brand-gold transition font-bold text-white shadow-inner"
                       />
                     </div>
-                    <div className="space-y-1">
-                      <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest pl-2">Familiya</label>
+                    <div className="space-y-1.5">
+                      <label className="text-[10px] font-black text-white/30 uppercase tracking-widest ml-4">Familiya</label>
                       <input 
                         type="text" 
                         value={profileForm.lastName} 
                         onChange={e => setProfileForm({...profileForm, lastName: e.target.value})}
-                        className="w-full p-4 border border-gray-200 rounded-2xl bg-gray-50 focus:bg-white outline-none focus:ring-2 focus:ring-blue-500 transition font-bold text-gray-800"
+                        className="w-full p-4 border border-white/10 rounded-2xl bg-brand-black focus:bg-brand-dark outline-none focus:border-brand-gold transition font-bold text-white shadow-inner"
                       />
                     </div>
-                    <div className="space-y-1">
-                      <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest pl-2">Telefon</label>
+                    <div className="space-y-1.5">
+                      <label className="text-[10px] font-black text-white/30 uppercase tracking-widest ml-4">Telefon</label>
                       <input 
                         type="text" 
                         value={profileForm.phone} 
                         onChange={e => setProfileForm({...profileForm, phone: formatPhoneNumber(e.target.value)})}
-                        className="w-full p-4 border border-gray-200 rounded-2xl bg-gray-50 focus:bg-white outline-none focus:ring-2 focus:ring-blue-500 transition font-bold text-gray-800"
+                        className="w-full p-4 border border-white/10 rounded-2xl bg-brand-black focus:bg-brand-dark outline-none focus:border-brand-gold transition font-bold text-white shadow-inner"
                         placeholder="Telefon"
                       />
                     </div>
-                    <div className="space-y-1">
-                      <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest pl-2">Parol</label>
+                    <div className="space-y-1.5">
+                      <label className="text-[10px] font-black text-white/30 uppercase tracking-widest ml-4">Parol</label>
                       <input 
                         type="text" 
                         value={profileForm.password} 
                         onChange={e => setProfileForm({...profileForm, password: e.target.value})}
-                        className="w-full p-4 border border-gray-200 rounded-2xl bg-gray-50 focus:bg-white outline-none focus:ring-2 focus:ring-blue-500 transition font-bold text-gray-800"
+                        className="w-full p-4 border border-white/10 rounded-2xl bg-brand-black focus:bg-brand-dark outline-none focus:border-brand-gold transition font-bold text-white shadow-inner"
                       />
                     </div>
                     <button 
@@ -1327,7 +1365,7 @@ const OperatorPanel: React.FC<OperatorPanelProps> = ({ user, state, addCheckIn, 
                         });
                         setIsEditingProfile(false);
                       }}
-                      className="w-full py-4 bg-blue-600 text-white rounded-2xl font-black uppercase tracking-widest text-xs shadow-lg hover:bg-blue-700 active:scale-95 transition-all mt-4"
+                      className="w-full py-5 gold-gradient text-brand-black rounded-2xl font-black uppercase tracking-widest text-xs shadow-xl shadow-brand-gold/20 hover:scale-[1.02] active:scale-95 transition-all mt-6"
                     >
                       Saqlash
                     </button>
@@ -1356,18 +1394,18 @@ const OperatorPanel: React.FC<OperatorPanelProps> = ({ user, state, addCheckIn, 
         if (!hasCheckedIn) {
           return (
             <div className="max-w-2xl mx-auto py-12 px-4">
-              <div className="bg-white rounded-[3.5rem] shadow-2xl overflow-hidden border border-gray-100 animate-in zoom-in-95 duration-500">
-                <div className="p-12 text-center bg-gradient-to-br from-blue-50 to-indigo-50/40">
-                  <div className="w-20 h-20 bg-white rounded-3xl shadow-xl flex items-center justify-center mx-auto mb-6 text-blue-600">
+              <div className="bg-brand-dark rounded-[3.5rem] shadow-2xl overflow-hidden border border-white/10 animate-in zoom-in-95 duration-500">
+                <div className="p-12 text-center bg-gradient-to-br from-brand-gold/10 to-brand-gold/5 border-b border-white/10">
+                  <div className="w-20 h-20 bg-brand-black rounded-3xl shadow-xl border border-white/10 flex items-center justify-center mx-auto mb-6 text-brand-gold">
                     <LogIn className="w-10 h-10" />
                   </div>
-                  <h2 className="text-4xl font-black text-blue-900 tracking-tight">Xush kelibsiz!</h2>
-                  <p className="text-gray-500 mt-3 font-medium text-lg">Bugungi ish kunini boshlash uchun tugmani bosing.</p>
+                  <h2 className="text-4xl font-black text-brand-gold tracking-tight">{t(language, 'welcome')}</h2>
+                  <p className="text-white/40 mt-3 font-medium text-lg">{t(language, 'start_work_day')}</p>
                 </div>
                 <div className="p-10">
                   <button 
                     onClick={() => setShowCheckInUI(true)}
-                    className="w-full py-8 bg-blue-600 text-white rounded-[2.5rem] font-black uppercase tracking-widest text-sm shadow-2xl shadow-blue-200 hover:bg-blue-700 active:scale-95 transition-all"
+                    className="w-full py-8 bg-brand-gold text-brand-black rounded-[2.5rem] font-black uppercase tracking-widest text-sm shadow-2xl shadow-brand-gold/20 hover:bg-brand-gold/90 active:scale-95 transition-all"
                   >
                     Ishni boshlash
                   </button>
@@ -1380,7 +1418,7 @@ const OperatorPanel: React.FC<OperatorPanelProps> = ({ user, state, addCheckIn, 
         const checkInForToday = state.checkIns.find(c => c.userId === user.id && c.date === today);
 
         return (
-          <div className="p-4 sm:p-6 lg:p-8 font-sans bg-gray-50/50 min-h-screen flex flex-col">
+          <div className="p-4 sm:p-6 lg:p-8 font-sans bg-brand-black min-h-screen flex flex-col">
             <div className="max-w-7xl mx-auto w-full flex-1 flex flex-col">
 
               {/* Header */}
@@ -1388,10 +1426,10 @@ const OperatorPanel: React.FC<OperatorPanelProps> = ({ user, state, addCheckIn, 
                 {checkInForToday && !checkInForToday.checkOutTime && (
                   <button 
                     onClick={() => handleCheckOut()}
-                    className="px-6 py-3 bg-red-500 text-white font-bold rounded-lg shadow-md hover:bg-red-600 transition-all duration-200 flex items-center gap-2"
+                    className="px-6 py-3 bg-red-500 !text-white font-bold rounded-lg shadow-md hover:bg-red-600 transition-all duration-200 flex items-center gap-2"
                   >
-                    <LogOut className="w-5 h-5" />
-                    <span>Ishni yakunlash</span>
+                    <LogOut className="w-5 h-5 !text-white" />
+                    <span className="!text-white">Ishni yakunlash</span>
                   </button>
                 )}
               </div>
@@ -1399,21 +1437,21 @@ const OperatorPanel: React.FC<OperatorPanelProps> = ({ user, state, addCheckIn, 
               <div className="mb-6">
                 <div className="w-full">
                   {/* Oylik Reja va Sotuvlar */}
-                  <div className="bg-white p-8 rounded-[3rem] shadow-xl border border-gray-100 h-full animate-in fade-in duration-300">
+                  <div className="bg-brand-dark p-8 rounded-[3rem] shadow-xl border border-white/10 h-full animate-in fade-in duration-300">
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-10 gap-6">
                   <div className="flex items-center gap-4">
-                    <h2 className="text-2xl font-black text-gray-800 flex items-center gap-3"><Smartphone className="w-8 h-8 text-indigo-600" /> Oylik Reja va Sotuvlar</h2>
+                    <h2 className="text-2xl font-black text-white flex items-center gap-3"><Smartphone className="w-8 h-8 text-brand-gold" /> {t(language, 'monthly_plan_sales')}</h2>
                     <div className="relative">
                       <div 
                         onClick={() => setShowMonthPicker(!showMonthPicker)}
-                        className="flex items-center gap-3 bg-white pl-3 pr-6 py-2 rounded-2xl border border-gray-200 shadow-sm hover:shadow-md hover:border-indigo-300 transition-all cursor-pointer"
+                        className="flex items-center gap-3 bg-brand-black pl-3 pr-6 py-2 rounded-2xl border border-white/10 shadow-sm hover:shadow-md hover:border-brand-gold/30 transition-all cursor-pointer"
                       >
-                        <div className="w-10 h-10 rounded-xl bg-indigo-50 flex items-center justify-center text-indigo-600 group-hover:scale-110 transition-transform">
+                        <div className="w-10 h-10 rounded-xl bg-brand-gold/10 flex items-center justify-center text-brand-gold group-hover:scale-110 transition-transform">
                           <Calendar className="w-5 h-5" />
                         </div>
-                        <span className="text-sm font-black text-gray-800 capitalize leading-none">
+                        <span className="text-sm font-black text-white capitalize leading-none">
                           {(() => {
-                            if (!selectedTargetMonth) return 'Oy tanlang';
+                            if (!selectedTargetMonth) return t(language, 'select_month');
                             const [y, m] = selectedTargetMonth.split('-');
                             const monthNames = ['Yanvar', 'Fevral', 'Mart', 'Aprel', 'May', 'Iyun', 'Iyul', 'Avgust', 'Sentabr', 'Oktabr', 'Noyabr', 'Dekabr'];
                             return `${monthNames[parseInt(m) - 1]} ${y}`;
@@ -1424,7 +1462,7 @@ const OperatorPanel: React.FC<OperatorPanelProps> = ({ user, state, addCheckIn, 
                       {showMonthPicker && (
                         <>
                           <div className="fixed inset-0 z-40" onClick={() => setShowMonthPicker(false)}></div>
-                          <div className="absolute top-full left-0 mt-4 bg-white rounded-3xl shadow-2xl border border-gray-100 p-6 z-50 w-80 animate-in fade-in zoom-in-95 duration-200">
+                          <div className="absolute top-full left-0 mt-4 bg-brand-dark rounded-3xl shadow-2xl border border-white/10 p-6 z-50 w-80 animate-in fade-in zoom-in-95 duration-200">
                             <div className="flex items-center justify-between mb-6">
                               <button 
                                 onClick={(e) => {
@@ -1432,11 +1470,11 @@ const OperatorPanel: React.FC<OperatorPanelProps> = ({ user, state, addCheckIn, 
                                   const [y, m] = (selectedTargetMonth || new Date().toISOString().slice(0, 7)).split('-');
                                   setSelectedTargetMonth(`${parseInt(y) - 1}-${m}`);
                                 }}
-                                className="p-2 hover:bg-gray-100 rounded-xl transition-colors text-gray-600"
+                                className="p-2 hover:bg-white/5 rounded-xl transition-colors text-white/60"
                               >
                                 <ChevronLeft className="w-5 h-5" />
                               </button>
-                              <span className="text-lg font-black text-gray-800">
+                              <span className="text-lg font-black text-white">
                                 {selectedTargetMonth.split('-')[0]}
                               </span>
                               <button 
@@ -1445,7 +1483,7 @@ const OperatorPanel: React.FC<OperatorPanelProps> = ({ user, state, addCheckIn, 
                                   const [y, m] = (selectedTargetMonth || new Date().toISOString().slice(0, 7)).split('-');
                                   setSelectedTargetMonth(`${parseInt(y) + 1}-${m}`);
                                 }}
-                                className="p-2 hover:bg-gray-100 rounded-xl transition-colors text-gray-600"
+                                className="p-2 hover:bg-white/5 rounded-xl transition-colors text-white/60"
                               >
                                 <ChevronRight className="w-5 h-5" />
                               </button>
@@ -1465,8 +1503,8 @@ const OperatorPanel: React.FC<OperatorPanelProps> = ({ user, state, addCheckIn, 
                                     }}
                                     className={`py-3 rounded-xl text-sm font-bold transition-all ${
                                       isSelected 
-                                        ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-200 scale-105' 
-                                        : 'bg-gray-50 text-gray-600 hover:bg-indigo-50 hover:text-indigo-600'
+                                        ? 'bg-brand-gold text-brand-black shadow-lg shadow-brand-gold/20 scale-105' 
+                                        : 'bg-white/5 text-white/60 hover:bg-brand-gold/10 hover:text-brand-gold'
                                     }`}
                                   >
                                     {mName}
@@ -1483,10 +1521,10 @@ const OperatorPanel: React.FC<OperatorPanelProps> = ({ user, state, addCheckIn, 
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
                   {[
-                    { name: 'Ucell', color: 'bg-purple-600', textColor: 'text-purple-600' },
-                    { name: 'Mobiuz', color: 'bg-red-600', textColor: 'text-red-600' },
-                    { name: 'Beeline', color: 'bg-yellow-400', textColor: 'text-yellow-600' },
-                    { name: 'Uztelecom', color: 'bg-blue-500', textColor: 'text-blue-500' }
+                    { name: 'Ucell', color: 'bg-[#9b51e0]', textColor: 'text-[#9b51e0]' },
+                    { name: 'Uztelecom', color: 'bg-[#009ee0]', textColor: 'text-[#009ee0]' },
+                    { name: 'Mobiuz', color: 'bg-[#eb1c24]', textColor: 'text-[#eb1c24]' },
+                    { name: 'Beeline', color: 'bg-[#fdb913]', textColor: 'text-[#fdb913]' }
                   ].map(company => {
                     const target = state.monthlyTargets?.find(t => t.month === selectedTargetMonth)?.targets?.[company.name] || 0;
                     const officeCount = state.monthlyTargets?.find(t => t.month === selectedTargetMonth)?.officeCounts?.[company.name] || 0;
@@ -1496,28 +1534,28 @@ const OperatorPanel: React.FC<OperatorPanelProps> = ({ user, state, addCheckIn, 
                     const percentage = Math.min(100, rawPercentage);
                     
                     return (
-                      <div key={company.name} className="p-6 bg-white rounded-[2rem] border border-gray-100 shadow-sm hover:shadow-xl hover:-translate-y-1 transition-all duration-500 group">
+                      <div key={company.name} className="p-6 bg-brand-black rounded-[2rem] border border-white/10 shadow-sm hover:shadow-xl hover:-translate-y-1 transition-all duration-500 group">
                         <div className="flex items-center justify-between mb-5">
-                          <div className={`w-12 h-12 ${company.color} rounded-2xl shadow-lg flex items-center justify-center text-white group-hover:rotate-12 transition-transform`}>
+                          <div className={`w-12 h-12 ${company.color} rounded-2xl shadow-lg flex items-center justify-center text-white keep-white group-hover:rotate-12 transition-transform`}>
                             <Smartphone className="w-6 h-6" />
                           </div>
                           <div className="text-right">
                             <p className={`text-2xl font-black ${company.textColor}`}>{sales}</p>
-                            <p className="text-[8px] font-black text-gray-400 uppercase tracking-widest">Sotildi</p>
+                            <p className="text-[8px] font-black text-gray-400 uppercase tracking-widest">{t(language, 'sold')}</p>
                           </div>
                         </div>
 
                         <div className="space-y-4">
                           <div className="flex items-center justify-between">
-                            <h3 className="font-black text-gray-800 text-lg">{company.name}</h3>
-                            <span className={`text-[10px] font-bold px-2 py-1 rounded-lg ${sales >= target && target > 0 ? 'text-green-500 bg-green-50' : 'text-blue-500 bg-blue-50'}`}>
+                            <h3 className="font-black text-white text-lg">{company.name}</h3>
+                            <span className={`text-[10px] font-bold px-2 py-1 rounded-lg ${sales >= target && target > 0 ? 'text-green-500 bg-green-500/10' : 'text-blue-500 bg-blue-500/10'}`}>
                               {sales >= target && target > 0 ? 'Bajarildi' : 'Jarayonda'}
                             </span>
                           </div>
-                          <div className="w-full bg-gray-100 h-1.5 rounded-full overflow-hidden">
+                          <div className="w-full bg-white/10 h-1.5 rounded-full overflow-hidden">
                             <div className={`h-full ${company.color} rounded-full transition-all duration-1000`} style={{ width: `${percentage}%` }}></div>
                           </div>
-                          <div className="flex justify-between text-[9px] font-black text-gray-400 uppercase tracking-widest">
+                          <div className="flex justify-between text-[9px] font-black text-white/40 uppercase tracking-widest">
                             <span>{sales} / {target}</span>
                             <span>{Math.round(rawPercentage)}%</span>
                           </div>
@@ -1533,15 +1571,15 @@ const OperatorPanel: React.FC<OperatorPanelProps> = ({ user, state, addCheckIn, 
           <div className="grid grid-cols-1 xl:grid-cols-3 gap-6 mb-6">
             <div className="xl:col-span-2 flex flex-col">
               {/* Savdo Paneli */}
-              <div className="bg-white rounded-[3rem] shadow-xl border border-gray-100 p-8 animate-in fade-in duration-500 h-full flex flex-col">
+              <div className="bg-brand-dark rounded-[3rem] shadow-xl border border-white/10 p-8 animate-in fade-in duration-500 h-full flex flex-col">
                 <div className="flex justify-between items-center mb-4">
-                  <h2 className="text-lg font-bold text-gray-800">Savdo Paneli</h2>
+                  <h2 className="text-lg font-black text-white uppercase tracking-tight">Savdo Paneli</h2>
                   <button 
                     onClick={() => setShowSaleForm(true)}
-                    className="px-5 py-2 bg-blue-600 text-white font-semibold rounded-lg shadow-sm hover:bg-blue-700 transition-all duration-200 flex items-center gap-2"
+                    className="px-5 py-2 gold-gradient text-brand-black font-black rounded-lg shadow-sm hover:scale-105 transition-all duration-200 flex items-center gap-2 text-[10px] uppercase tracking-widest"
                   >
                     <PlusCircle className="w-5 h-5" />
-                    <span>Sotuv qo'shish</span>
+                    <span>{t(language, 'add_sale')}</span>
                   </button>
                 </div>
                 
@@ -1589,45 +1627,107 @@ const OperatorPanel: React.FC<OperatorPanelProps> = ({ user, state, addCheckIn, 
                       setNewSale({ company: 'Ucell', tariff: '', count: '1', bonus: '0' }); 
                       setShowSaleForm(false); 
                     }} 
-                    className="p-8 bg-gray-50/50 space-y-6 border-b border-gray-50 animate-in slide-in-from-top duration-300"
+                    className="p-8 bg-brand-black space-y-6 border-b border-white/10 animate-in slide-in-from-top duration-300"
                   >
                     <div className="flex items-center justify-between mb-2">
-                      <h3 className="text-sm font-black text-blue-900 uppercase tracking-widest">{editingSaleId ? 'Sotuvni tahrirlash' : 'Yangi sotuv qo\'shish'}</h3>
+                      <h3 className="text-sm font-black text-brand-gold uppercase tracking-widest">{editingSaleId ? t(language, 'edit_sale') : t(language, 'new_sale')}</h3>
                     </div>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                      <div className="space-y-1.5">
-                        <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest pl-2">Kompaniya</label>
-                        <select 
-                          className="w-full p-4 border border-gray-200 rounded-2xl bg-white text-sm font-bold outline-none focus:border-blue-600 transition" 
-                          value={newSale.company} 
-                          onChange={e => setNewSale({...newSale, company: e.target.value})}
-                        >
-                          <option>Ucell</option>
-                          <option>Mobiuz</option>
-                          <option>Beeline</option>
-                          <option>Uztelecom</option>
-                        </select>
+                      <div className="space-y-1.5 relative z-20">
+                        <label className="text-[10px] font-black text-white/40 uppercase tracking-widest pl-2">Kompaniya</label>
+                        <div className="relative">
+                          <button
+                            type="button"
+                            onClick={() => setOpenDropdown(openDropdown === 'company' ? null : 'company')}
+                            className="w-full p-4 pr-10 border border-white/10 rounded-2xl bg-brand-dark text-sm font-bold outline-none focus:border-brand-gold transition text-white text-left flex items-center justify-between"
+                          >
+                            <span>{newSale.company}</span>
+                            <ChevronDown className={`w-5 h-5 text-white/40 transition-transform ${openDropdown === 'company' ? 'rotate-180' : ''}`} />
+                          </button>
+                          
+                          {openDropdown === 'company' && (
+                            <>
+                              <div className="fixed inset-0 z-10" onClick={() => setOpenDropdown(null)}></div>
+                              <div className="absolute top-full left-0 right-0 mt-2 bg-brand-dark border border-white/10 rounded-2xl shadow-2xl z-20 overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+                                {['Ucell', 'Uztelecom', 'Mobiuz', 'Beeline'].map((company) => (
+                                  <button
+                                    type="button"
+                                    key={company}
+                                    onClick={() => {
+                                      setNewSale({...newSale, company, tariff: ''});
+                                      setOpenDropdown(null);
+                                    }}
+                                    className={`w-full text-left p-4 text-sm font-bold hover:bg-white/5 transition-colors ${newSale.company === company ? 'text-brand-gold bg-brand-gold/10' : 'text-white'}`}
+                                  >
+                                    {company}
+                                  </button>
+                                ))}
+                              </div>
+                            </>
+                          )}
+                        </div>
                         {(user.inventory?.[newSale.company] || 0) <= 0 && (
                           <p className="text-[10px] font-black text-red-500 uppercase tracking-widest pl-2 mt-1 flex items-center gap-1">
-                            <AlertTriangle className="w-3 h-3" /> Omborda tugagan!
+                            <AlertTriangle className="w-3 h-3" /> {t(language, 'out_of_stock')}
                           </p>
                         )}
                       </div>
-                      <div className="space-y-1.5"><label className="text-[10px] font-black text-gray-400 uppercase tracking-widest pl-2">Tarif</label><input type="text" placeholder="Tarif nomi" className="w-full p-4 border border-gray-200 rounded-2xl bg-white text-sm font-bold outline-none focus:border-blue-600 transition" value={newSale.tariff} onChange={e => setNewSale({...newSale, tariff: e.target.value})} required /></div>
+                      <div className="space-y-1.5 relative z-10">
+                        <label className="text-[10px] font-black text-white/40 uppercase tracking-widest pl-2">Tarif</label>
+                        <div className="relative">
+                          <button
+                            type="button"
+                            onClick={() => setOpenDropdown(openDropdown === 'tariff' ? null : 'tariff')}
+                            className={`w-full p-4 pr-10 border border-white/10 rounded-2xl bg-brand-dark text-sm font-bold outline-none focus:border-brand-gold transition text-left flex items-center justify-between ${newSale.tariff ? 'text-white' : 'text-white/40'}`}
+                          >
+                            <span>{newSale.tariff || 'Tarifni tanlang'}</span>
+                            <ChevronDown className={`w-5 h-5 text-white/40 transition-transform ${openDropdown === 'tariff' ? 'rotate-180' : ''}`} />
+                          </button>
+
+                          {openDropdown === 'tariff' && (
+                            <>
+                              <div className="fixed inset-0 z-10" onClick={() => setOpenDropdown(null)}></div>
+                              <div className="absolute top-full left-0 right-0 mt-2 bg-brand-dark border border-white/10 rounded-2xl shadow-2xl z-20 overflow-hidden animate-in fade-in zoom-in-95 duration-200 max-h-60 overflow-y-auto custom-scrollbar">
+                                {state.tariffs?.[newSale.company]?.map((t, i) => (
+                                  <button
+                                    type="button"
+                                    key={i}
+                                    onClick={() => {
+                                      setNewSale({...newSale, tariff: t});
+                                      setOpenDropdown(null);
+                                    }}
+                                    className={`w-full text-left p-4 text-sm font-bold hover:bg-white/5 transition-colors ${newSale.tariff === t ? 'text-brand-gold bg-brand-gold/10' : 'text-white'}`}
+                                  >
+                                    {t}
+                                  </button>
+                                ))}
+                                {(!state.tariffs?.[newSale.company] || state.tariffs[newSale.company].length === 0) && (
+                                  <div className="p-4 text-center text-white/30 text-xs italic">
+                                    Tariflar mavjud emas
+                                  </div>
+                                )}
+                              </div>
+                            </>
+                          )}
+                        </div>
+                      </div>
                     </div>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                       <div className="space-y-1.5">
-                        <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest pl-2">Soni</label>
+                        <label className="text-[10px] font-black text-white/40 uppercase tracking-widest pl-2">Soni</label>
                         <input 
                           type="number" 
                           min="1" 
-                          className={`w-full p-4 border rounded-2xl bg-white text-sm font-bold outline-none transition ${ (user.inventory?.[newSale.company] || 0) < (Number(newSale.count) + Number(newSale.bonus)) ? 'border-red-300 focus:border-red-600' : 'border-gray-200 focus:border-blue-600'}`} 
+                          className={`w-full p-4 border rounded-2xl bg-brand-dark text-sm font-bold outline-none transition text-white ${ (user.inventory?.[newSale.company] || 0) < (Number(newSale.count) + Number(newSale.bonus)) ? 'border-red-500/50 focus:border-red-500' : 'border-white/10 focus:border-brand-gold'}`} 
                           value={newSale.count} 
-                          onChange={e => setNewSale({...newSale, count: e.target.value})} 
+                          onChange={e => {
+                            const val = e.target.value;
+                            if (val.length <= 7) setNewSale({...newSale, count: val});
+                          }} 
                         />
-                        <p className="text-[9px] font-bold text-gray-400 pl-2 mt-1">Mavjud: {user.inventory?.[newSale.company] || 0} dona</p>
+                        <p className="text-[9px] font-bold text-white/30 pl-2 mt-1">Mavjud: {formatLargeNumber(user.inventory?.[newSale.company] || 0)} dona</p>
                       </div>
-                      <div className="space-y-1.5"><label className="text-[10px] font-black text-gray-400 uppercase tracking-widest pl-2">Bonus (ta)</label><input type="number" min="0" step="1" placeholder="0 ta" className="w-full p-4 border border-gray-200 rounded-2xl bg-white text-sm font-bold outline-none focus:border-blue-600 transition" value={newSale.bonus} onChange={e => setNewSale({...newSale, bonus: e.target.value})} /></div>
+                      <div className="space-y-1.5"><label className="text-[10px] font-black text-white/40 uppercase tracking-widest pl-2">Bonus (ta)</label><input type="number" min="0" step="1" placeholder="0 ta" className="w-full p-4 border border-white/10 rounded-2xl bg-brand-dark text-sm font-bold outline-none focus:border-brand-gold transition text-white" value={newSale.bonus} onChange={e => { const val = e.target.value; if (val.length <= 7) setNewSale({...newSale, bonus: val}); }} /></div>
                     </div>
                     <div className="flex gap-4 pt-2">
                       <button 
@@ -1645,7 +1745,7 @@ const OperatorPanel: React.FC<OperatorPanelProps> = ({ user, state, addCheckIn, 
                           }
                           return effectiveInventory < (count + bonus);
                         })()}
-                        className="flex-1 bg-indigo-600 text-white py-5 rounded-2xl font-black uppercase tracking-widest text-[10px] shadow-lg hover:bg-indigo-700 transition-all disabled:opacity-50 disabled:bg-gray-400"
+                        className="flex-1 gold-gradient text-brand-black py-5 rounded-2xl font-black uppercase tracking-widest text-[10px] shadow-lg hover:scale-[1.02] transition-all disabled:opacity-50 disabled:bg-white/10 disabled:text-white/20"
                       >
                         {(() => {
                           const count = Number(newSale.count);
@@ -1666,20 +1766,33 @@ const OperatorPanel: React.FC<OperatorPanelProps> = ({ user, state, addCheckIn, 
                 )}
 
                 {/* Sales List */}
-                <div className="overflow-x-auto flex-1">
+                <div className="overflow-x-auto flex-1 no-scrollbar">
                   <table className="w-full text-left">
-                    <thead className="bg-gray-50 text-[9px] font-black text-gray-400 uppercase tracking-[0.2em]"><tr className="border-b border-gray-100"><th className="px-8 py-4">Brend</th><th className="px-8 py-4">Tarif</th><th className="px-8 py-4 text-center">Soni</th><th className="px-8 py-4 text-center">Bonus</th><th className="px-8 py-4 text-center">Jami</th><th className="px-8 py-4 text-right">Vaqt</th></tr></thead>
-                    <tbody className="divide-y divide-gray-50">
-                      {todaySales.map(sale => (
-                        <tr key={sale.id} className="hover:bg-blue-50/30 transition group">
-                          <td className="px-8 py-5"><span className="px-3 py-1 bg-blue-50 text-blue-600 rounded-lg text-[10px] font-black uppercase">{sale.company}</span></td>
-                          <td className="px-8 py-5 text-sm font-bold text-gray-700">{sale.tariff}</td>
-                          <td className="px-8 py-5 text-center font-black text-xl text-blue-600">{sale.count}</td>
-                          <td className="px-8 py-5 text-center font-black text-lg text-gray-700">{sale.bonus}</td>
-                          <td className="px-8 py-5 text-center font-black text-lg text-indigo-600">{sale.count + sale.bonus}</td>
+                    <thead className="bg-white/5 text-[9px] font-black text-white/40 uppercase tracking-[0.2em]"><tr className="border-b border-white/5"><th className="px-8 py-4">Brend</th><th className="px-8 py-4">Tarif</th><th className="px-8 py-4 text-center">Soni</th><th className="px-8 py-4 text-center">Bonus</th><th className="px-8 py-4 text-center">Jami</th><th className="px-8 py-4 text-right">Vaqt</th></tr></thead>
+                    <tbody className="divide-y divide-white/5">
+                      {todaySales.sort((a, b) => {
+                        const order = { 'Ucell': 1, 'Uztelecom': 2, 'Mobiuz': 3, 'Beeline': 4 };
+                        return (order[a.company as keyof typeof order] || 99) - (order[b.company as keyof typeof order] || 99) || b.timestamp.localeCompare(a.timestamp);
+                      }).map(sale => (
+                        <tr key={sale.id} className="hover:bg-white/5 transition group">
+                          <td className="px-8 py-5">
+                            <span className={`px-3 py-1 rounded-lg text-[10px] font-black uppercase ${
+                              sale.company === 'Ucell' ? 'bg-[#9b51e0]/10 text-[#9b51e0]' :
+                              sale.company === 'Uztelecom' ? 'bg-[#009ee0]/10 text-[#009ee0]' :
+                              sale.company === 'Mobiuz' ? 'bg-[#eb1c24]/10 text-[#eb1c24]' :
+                              sale.company === 'Beeline' ? 'bg-[#fdb913]/10 text-[#fdb913]' :
+                              'bg-blue-500/10 text-blue-500'
+                            }`}>
+                              {sale.company}
+                            </span>
+                          </td>
+                          <td className="px-8 py-5 text-sm font-bold text-white/70">{sale.tariff}</td>
+                          <td className="px-8 py-5 text-center font-black text-xl text-blue-500">{sale.count}</td>
+                          <td className="px-8 py-5 text-center font-black text-lg text-white/70">{sale.bonus}</td>
+                          <td className="px-8 py-5 text-center font-black text-lg text-indigo-500">{sale.count + sale.bonus}</td>
                           <td className="px-8 py-5 text-right">
                             <div className="flex items-center justify-end gap-3">
-                              <span className="text-[10px] font-bold text-gray-300">{new Date(sale.timestamp).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}</span>
+                              <span className="text-[10px] font-bold text-white/30">{new Date(sale.timestamp).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}</span>
                               <button 
                                 onClick={() => {
                                   setEditingSaleId(sale.id);
@@ -1691,15 +1804,21 @@ const OperatorPanel: React.FC<OperatorPanelProps> = ({ user, state, addCheckIn, 
                                   });
                                   setShowSaleForm(true);
                                 }}
-                                className="p-2 text-gray-300 hover:text-blue-600 transition opacity-0 group-hover:opacity-100"
+                                className="p-2 text-white/30 hover:text-blue-500 transition opacity-0 group-hover:opacity-100"
                               >
                                 <Edit3 className="w-4 h-4" />
+                              </button>
+                              <button 
+                                onClick={() => setDeletingSaleId(sale.id)}
+                                className="p-2 text-white/30 hover:text-red-500 transition opacity-0 group-hover:opacity-100"
+                              >
+                                <Trash2 className="w-4 h-4" />
                               </button>
                             </div>
                           </td>
                         </tr>
                       ))}
-                      {todaySales.length === 0 && <tr><td colSpan={6} className="px-8 py-16 text-center text-gray-300 font-bold italic">Bugungi savdolar mavjud emas</td></tr>}
+                      {todaySales.length === 0 && <tr><td colSpan={6} className="px-8 py-16 text-center text-white/30 font-bold italic">{t(language, 'no_today_sales')}</td></tr>}
                     </tbody>
                   </table>
                 </div>
@@ -1708,35 +1827,23 @@ const OperatorPanel: React.FC<OperatorPanelProps> = ({ user, state, addCheckIn, 
 
             <div className="xl:col-span-1 flex flex-col">
               {/* Bugungi davomat */}
-              <div className="bg-white p-8 rounded-[3rem] shadow-xl border border-gray-100 relative overflow-hidden animate-in fade-in duration-700 h-full">
-                <h2 className="font-black text-gray-400 text-[9px] uppercase tracking-widest mb-6 flex items-center gap-2"><History className="w-4 h-4 text-blue-600" /> BUGUNGI DAVOMAT</h2>
+              <div className="bg-brand-dark p-8 rounded-[3rem] shadow-xl border border-white/10 relative overflow-hidden animate-in fade-in duration-700">
+                <h2 className="font-black text-white/40 text-[9px] uppercase tracking-widest mb-6 flex items-center gap-2"><History className="w-4 h-4 text-brand-gold" /> BUGUNGI DAVOMAT</h2>
                 
                 <div className="space-y-5">
                   {userCheckIn ? (() => {
                     const checkTime = new Date(userCheckIn.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true }).toUpperCase();
                     const isLate = !!lateness;
-                    const boxStyle = isLate ? 'bg-red-50 border-red-300 shadow-red-100' : 'bg-green-50 border-green-100 shadow-green-100';
+                    const boxStyle = isLate ? 'bg-red-600 dark:bg-red-500/10 border-red-500/20 shadow-red-500/10' : 'bg-green-600 dark:bg-green-500/10 border-green-500/20 shadow-green-500/10';
 
                     return (
                       <div className={`p-6 rounded-[2rem] border-2 transition-all flex flex-col gap-3 shadow-lg ${boxStyle}`}>
                         <div className="flex items-center justify-between">
                           <div className="flex items-center gap-4">
-                            <div className={`p-4 rounded-2xl shadow-md ${isLate ? 'bg-red-600' : 'bg-green-600'} text-white`}><LogIn className="w-6 h-6" /></div>
+                            <div className={`p-4 rounded-2xl shadow-md ${isLate ? 'bg-white text-red-600 dark:bg-red-600 dark:text-white' : 'bg-white text-green-600 dark:bg-green-600 dark:text-white'}`}><LogIn className="w-6 h-6" /></div>
                             <div>
                               <div className="flex items-center gap-2 mb-0.5">
-                                <p className={`text-[9px] font-black uppercase tracking-widest ${isLate ? 'text-red-600' : 'text-green-500'}`}>Kelish</p>
-                                {editingTime?.type !== 'checkIn' && (
-                                  <button 
-                                    onClick={() => {
-                                      const { start } = getWorkingTimes();
-                                      setEditingTime({ type: 'checkIn', current: start });
-                                      setNewTime(start);
-                                    }}
-                                    className="p-1 bg-white/50 rounded-lg hover:bg-white transition shadow-sm"
-                                  >
-                                    <Edit className="w-3 h-3 text-gray-500" />
-                                  </button>
-                                )}
+                                <p className={`text-[9px] font-black uppercase tracking-widest ${isLate ? '!text-white dark:!text-red-500' : '!text-white dark:!text-green-500'}`}>Kelish</p>
                                 {isLate && (
                                   <div className="bg-red-600 text-white text-[8px] font-black px-2 py-0.5 rounded-full uppercase tracking-tighter animate-pulse shadow-md ring-2 ring-white">LATE</div>
                                 )}
@@ -1747,7 +1854,7 @@ const OperatorPanel: React.FC<OperatorPanelProps> = ({ user, state, addCheckIn, 
                                     type="time" 
                                     value={newTime} 
                                     onChange={e => setNewTime(e.target.value)}
-                                    className="bg-white border border-gray-200 rounded-lg px-2 py-1 text-lg font-bold w-32 outline-none focus:ring-2 focus:ring-blue-500"
+                                    className="bg-brand-black border border-white/10 rounded-lg px-2 py-1 text-lg font-bold w-32 outline-none focus:border-brand-gold text-white"
                                     autoFocus
                                   />
                                   <button 
@@ -1763,15 +1870,15 @@ const OperatorPanel: React.FC<OperatorPanelProps> = ({ user, state, addCheckIn, 
                                   >
                                     <Check className="w-4 h-4" />
                                   </button>
-                                  <button onClick={() => setEditingTime(null)} className="p-2 bg-gray-200 text-gray-600 rounded-lg hover:bg-gray-300 transition shadow-sm"><X className="w-4 h-4" /></button>
+                                  <button onClick={() => setEditingTime(null)} className="p-2 bg-white/10 text-white rounded-lg hover:bg-white/20 transition shadow-sm border border-white/10"><X className="w-4 h-4" /></button>
                                 </div>
                               ) : (
-                                <p className={`text-2xl font-black tracking-tight ${isLate ? 'text-red-900' : 'text-gray-800'}`}>{checkTime}</p>
+                                <p className={`text-2xl font-black tracking-tight ${isLate ? '!text-white dark:!text-red-500' : '!text-white'}`}>{checkTime}</p>
                               )}
                             </div>
                           </div>
-                          {!hasReported && <button onClick={() => setIsEditingCheckIn(true)} className="p-3 bg-white text-blue-600 rounded-xl shadow-md border border-gray-100 active:scale-90 transition-all hover:bg-blue-50"><Edit3 className="w-4 h-4" /></button>}
-                          {hasReported && <button onClick={() => setIsEditingCheckIn(true)} className="p-3 bg-white text-blue-600 rounded-xl shadow-md border border-gray-100 active:scale-90 transition-all hover:bg-blue-50"><Edit3 className="w-4 h-4" /></button>}
+                          {!hasReported && <button onClick={() => setIsEditingCheckIn(true)} className="p-3 bg-white text-green-600 dark:bg-brand-black dark:text-brand-gold rounded-xl shadow-md border border-white/20 dark:border-brand-gold/20 active:scale-90 transition-all hover:bg-white/90 dark:hover:bg-brand-gold/10"><Edit3 className="w-4 h-4" /></button>}
+                          {hasReported && <button onClick={() => setIsEditingCheckIn(true)} className="p-3 bg-white text-green-600 dark:bg-brand-black dark:text-brand-gold rounded-xl shadow-md border border-white/20 dark:border-brand-gold/20 active:scale-90 transition-all hover:bg-white/90 dark:hover:bg-brand-gold/10"><Edit3 className="w-4 h-4" /></button>}
                         </div>
                         {isLate && editingTime?.type !== 'checkIn' && (
                           <div className="mt-1 flex items-center gap-2 bg-red-600 text-white p-3 rounded-2xl shadow-xl shadow-red-200 text-[10px] font-black uppercase animate-in slide-in-from-top-2 duration-300">
@@ -1782,29 +1889,17 @@ const OperatorPanel: React.FC<OperatorPanelProps> = ({ user, state, addCheckIn, 
                       </div>
                     );
                   })() : (
-                    <div className="p-6 rounded-[2rem] border border-gray-100 bg-gray-50 text-gray-400 italic text-center">
+                    <div className="p-6 rounded-[2rem] border border-white/10 bg-white/5 text-white/40 italic text-center">
                       Kelish ma'lumotlari topilmadi
                     </div>
                   )}
                   
-                  <div className={`p-6 rounded-[2rem] border shadow-sm flex items-center justify-between ${hasReported ? 'bg-blue-50 border-blue-100' : 'bg-gray-50 border-gray-100'}`}>
+                  <div className={`p-6 rounded-[2rem] border shadow-sm flex items-center justify-between bg-blue-600 dark:bg-blue-500/10 border-blue-500/20`}>
                     <div className="flex items-center gap-4">
-                      <div className={`p-3.5 rounded-xl shadow-md ${hasReported ? 'bg-blue-600 text-white' : 'bg-gray-400 text-white'}`}><LogOut className="w-6 h-6" /></div>
+                      <div className={`p-3.5 rounded-xl shadow-md bg-white text-blue-600 dark:bg-blue-600 dark:text-white`}><LogOut className="w-6 h-6" /></div>
                       <div>
                         <div className="flex items-center gap-2 mb-1">
-                          <p className="text-[9px] font-black text-gray-400 uppercase tracking-widest">Ketish</p>
-                          {hasReported && editingTime?.type !== 'checkOut' && (
-                            <button 
-                              onClick={() => {
-                                const { end } = getWorkingTimes();
-                                setEditingTime({ type: 'checkOut', current: end });
-                                setNewTime(end);
-                              }}
-                              className="p-1 bg-white/50 rounded-lg hover:bg-white transition shadow-sm"
-                            >
-                              <Edit className="w-3 h-3 text-gray-500" />
-                            </button>
-                          )}
+                          <p className="text-[9px] font-black !text-white dark:!text-white/30 uppercase tracking-widest">Ketish</p>
                         </div>
                         {editingTime?.type === 'checkOut' ? (
                           <div className="flex items-center gap-2 mt-1">
@@ -1812,7 +1907,7 @@ const OperatorPanel: React.FC<OperatorPanelProps> = ({ user, state, addCheckIn, 
                               type="time" 
                               value={newTime} 
                               onChange={e => setNewTime(e.target.value)}
-                              className="bg-white border border-gray-200 rounded-lg px-2 py-1 text-lg font-bold w-32 outline-none focus:ring-2 focus:ring-blue-500"
+                              className="bg-brand-black border border-white/10 rounded-lg px-2 py-1 text-lg font-bold w-32 outline-none focus:border-brand-gold text-white"
                               autoFocus
                             />
                             <button 
@@ -1828,24 +1923,24 @@ const OperatorPanel: React.FC<OperatorPanelProps> = ({ user, state, addCheckIn, 
                             >
                               <Check className="w-4 h-4" />
                             </button>
-                            <button onClick={() => setEditingTime(null)} className="p-2 bg-gray-200 text-gray-600 rounded-lg hover:bg-gray-300 transition shadow-sm"><X className="w-4 h-4" /></button>
+                            <button onClick={() => setEditingTime(null)} className="p-2 bg-white/10 text-white rounded-lg hover:bg-white/20 transition shadow-sm border border-white/10"><X className="w-4 h-4" /></button>
                           </div>
                         ) : (
-                          <p className="text-2xl font-black text-gray-800">{hasReported ? new Date(currentReport!.timestamp).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit', hour12: true}).toUpperCase() : 'Hali ketmagan'}</p>
+                          <p className={`text-2xl font-black ${hasReported ? '!text-white' : '!text-white/50 dark:!text-white/30'}`}>{hasReported ? new Date(currentReport!.timestamp).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit', hour12: true}).toUpperCase() : 'Hali ketmagan'}</p>
                         )}
                       </div>
                     </div>
                     {hasReported && (
-                      <button onClick={() => setIsEditingReport(true)} className="p-3 bg-white text-blue-600 rounded-xl shadow-md border border-gray-100 active:scale-90 transition-all hover:bg-blue-50">
+                      <button onClick={() => setIsEditingReport(true)} className="p-3 bg-white text-blue-600 dark:bg-brand-black dark:text-brand-gold rounded-xl shadow-md border border-white/20 dark:border-brand-gold/20 active:scale-90 transition-all hover:bg-white/90 dark:hover:bg-brand-gold/10">
                         <Edit3 className="w-4 h-4" />
                       </button>
                     )}
                   </div>
 
-                  <div className="p-8 bg-blue-600 rounded-[2.5rem] text-white shadow-xl shadow-blue-100 relative overflow-hidden group">
-                    <div className="absolute -right-4 -top-4 w-20 h-20 bg-white/10 rounded-full group-hover:scale-150 transition-transform duration-700"></div>
-                    <p className="text-[9px] font-black text-blue-100 uppercase tracking-widest mb-1 relative z-10">Bugun jami savdo</p>
-                    <p className="text-4xl font-black tracking-tight relative z-10">{todaySales.reduce((acc, s) => acc + s.count + s.bonus, 0)} <span className="text-xs opacity-60">Dona</span></p>
+                  <div className="p-8 bg-brand-gold rounded-[2.5rem] !text-white shadow-xl shadow-brand-gold/20 relative overflow-hidden group">
+                    <div className="absolute -right-4 -top-4 w-20 h-20 bg-brand-black/10 rounded-full group-hover:scale-150 transition-transform duration-700"></div>
+                    <p className="text-[9px] font-black !text-white/80 uppercase tracking-widest mb-1 relative z-10">{t(language, 'today_total_sales')}</p>
+                    <p className="text-4xl font-black tracking-tight relative z-10">{todaySales.reduce((acc, s) => acc + s.count + s.bonus, 0)} <span className="text-xs opacity-60 capitalize">{t(language, 'pcs')}</span></p>
                   </div>
                 </div>
               </div>
@@ -1855,19 +1950,19 @@ const OperatorPanel: React.FC<OperatorPanelProps> = ({ user, state, addCheckIn, 
           <div className="mb-6">
               {/* Daily Report Section */}
               {!hasReported || isEditingReport ? (
-                <section className="bg-white rounded-[3rem] shadow-xl border border-gray-100 overflow-hidden mt-6 animate-in slide-in-from-bottom-4 duration-500">
-                  <div className="p-8 border-b border-gray-50 flex items-center justify-between bg-white">
+                <section className="bg-brand-dark rounded-[3rem] shadow-xl border border-white/10 overflow-hidden mt-6 animate-in slide-in-from-bottom-4 duration-500">
+                  <div className="p-8 border-b border-white/5 flex items-center justify-between bg-brand-black">
                     <div className="flex items-center gap-3">
-                      <h2 className="text-xl font-black text-gray-800 tracking-tight">{isEditingReport ? "Hisobotni tahrirlash" : "Kun yakuni hisoboti"}</h2>
+                      <h2 className="text-xl font-black text-white tracking-tight">{isEditingReport ? t(language, 'edit_report') : t(language, 'end_day_report')}</h2>
                       {isEditingReport && (
-                        <button onClick={() => setIsEditingReport(false)} className="p-2 bg-gray-100 rounded-full hover:bg-gray-200 transition text-gray-500">
+                        <button onClick={() => setIsEditingReport(false)} className="p-2 bg-white/5 rounded-full hover:bg-white/10 transition text-white/40">
                           <X className="w-4 h-4" />
                         </button>
                       )}
                     </div>
                     <button 
                       onClick={() => reportPhotoInputRef.current?.click()}
-                      className={`p-3.5 rounded-2xl transition-all shadow-md flex items-center gap-2 text-[10px] font-black uppercase tracking-widest ${reportPhotos.length > 0 ? 'bg-blue-600 text-white shadow-blue-100' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'}`}
+                      className={`p-3.5 rounded-2xl transition-all shadow-md flex items-center gap-2 text-[10px] font-black uppercase tracking-widest ${reportPhotos.length > 0 ? 'bg-brand-gold text-brand-black shadow-brand-gold/20' : 'bg-white/5 text-white/40 hover:bg-white/10'}`}
                     >
                       <Plus className="w-4 h-4" />
                       <span>Rasm qo'shish {reportPhotos.length > 0 && `(${reportPhotos.length})`}</span>
@@ -1879,7 +1974,7 @@ const OperatorPanel: React.FC<OperatorPanelProps> = ({ user, state, addCheckIn, 
                     {reportPhotos.length > 0 && (
                       <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 pb-4">
                         {reportPhotos.map((photo, idx) => (
-                          <div key={idx} className="relative aspect-video rounded-2xl overflow-hidden shadow-md border-2 border-white ring-2 ring-gray-100 group">
+                          <div key={idx} className="relative aspect-video rounded-2xl overflow-hidden shadow-md border-2 border-brand-dark ring-2 ring-white/5 group">
                             <img src={photo} className="w-full h-full object-cover" />
                             <button 
                               onClick={() => removeReportPhoto(idx)} 
@@ -1891,7 +1986,7 @@ const OperatorPanel: React.FC<OperatorPanelProps> = ({ user, state, addCheckIn, 
                         ))}
                         <div 
                           onClick={() => reportPhotoInputRef.current?.click()}
-                          className="aspect-video rounded-2xl border-2 border-dashed border-gray-200 flex flex-col items-center justify-center text-gray-400 hover:border-blue-400 hover:text-blue-500 cursor-pointer transition-all"
+                          className="aspect-video rounded-2xl border-2 border-dashed border-white/10 flex flex-col items-center justify-center text-white/20 hover:border-brand-gold/30 hover:text-brand-gold cursor-pointer transition-all"
                         >
                           <Plus className="w-6 h-6 mb-1" />
                           <span className="text-[8px] font-black uppercase">Yana qo'shish</span>
@@ -1900,9 +1995,9 @@ const OperatorPanel: React.FC<OperatorPanelProps> = ({ user, state, addCheckIn, 
                     )}
                     
                     <textarea 
-                      className="w-full p-6 border border-gray-200 rounded-[2rem] bg-gray-50 focus:ring-4 focus:ring-blue-500/5 focus:border-blue-600 outline-none transition font-medium text-base shadow-inner" 
+                      className="w-full p-6 border border-white/10 rounded-[2rem] bg-brand-black focus:border-brand-gold outline-none transition font-medium text-base text-white shadow-inner" 
                       rows={3} 
-                      placeholder="Bugungi ish xulosasini kiriting..." 
+                      placeholder={t(language, 'enter_report_placeholder')} 
                       value={reportText} 
                       onChange={e => setReportText(e.target.value)} 
                     />
@@ -1926,15 +2021,15 @@ const OperatorPanel: React.FC<OperatorPanelProps> = ({ user, state, addCheckIn, 
                         setReportText('');
                         setReportPhotos([]);
                       }
-                    }} className="w-full py-6 bg-indigo-600 text-white rounded-[2rem] font-black uppercase tracking-widest text-[10px] shadow-xl hover:bg-indigo-700 active:scale-95 transition-all flex items-center justify-center gap-3">
-                      {isEditingReport ? "Saqlash" : "Hisobotni yuborish"} <Send className="w-4 h-4" />
+                    }} className="w-full py-6 gold-gradient text-brand-black rounded-[2rem] font-black uppercase tracking-widest text-[10px] shadow-xl shadow-brand-gold/20 hover:scale-[1.02] active:scale-95 transition-all flex items-center justify-center gap-3">
+                      {isEditingReport ? t(language, 'save') : t(language, 'send_report')} <Send className="w-4 h-4" />
                     </button>
                   </div>
                 </section>
               ) : (
-                <div className="bg-green-600 p-10 rounded-[3rem] text-white flex items-center gap-6 shadow-xl animate-in fade-in slide-in-from-bottom-5 mt-6">
-                  <div className="p-4 bg-white/20 rounded-2xl backdrop-blur-md"><CheckCircle2 className="w-10 h-10" /></div>
-                  <div><p className="font-black text-2xl leading-none mb-1">Ajoyib!</p><p className="font-medium opacity-80 text-sm">Bugungi ish kuningiz muvaffaqiyatli yakunlandi!</p></div>
+                <div className="bg-brand-dark p-10 rounded-[3rem] text-white flex items-center gap-6 shadow-xl border border-brand-gold/20 animate-in fade-in slide-in-from-bottom-5 mt-6">
+                  <div className="p-4 bg-brand-gold/20 rounded-2xl backdrop-blur-md text-brand-gold"><CheckCircle2 className="w-10 h-10" /></div>
+                  <div><p className="font-black text-2xl leading-none mb-1 uppercase tracking-tight">{t(language, 'great')}</p><p className="font-medium text-white/60 text-sm">{t(language, 'work_day_ended')}</p></div>
                 </div>
               )}
             </div>
@@ -1948,6 +2043,37 @@ const OperatorPanel: React.FC<OperatorPanelProps> = ({ user, state, addCheckIn, 
   return (
     <div className="w-full">
       {renderContent()}
+      {/* Delete Confirmation Modal */}
+      {deletingSaleId && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="bg-brand-dark border border-white/10 rounded-3xl p-8 max-w-sm w-full shadow-2xl animate-in zoom-in-95 duration-200">
+            <div className="w-16 h-16 bg-red-500/10 rounded-2xl flex items-center justify-center mx-auto mb-6 text-red-500 border border-red-500/20 shadow-lg shadow-red-500/10">
+              <Trash2 className="w-8 h-8" />
+            </div>
+            <h3 className="text-xl font-black text-white text-center mb-2 uppercase tracking-tight">O'chirishni tasdiqlang</h3>
+            <p className="text-white/50 text-center text-sm mb-8 font-medium leading-relaxed">Haqiqatan ham bu sotuvni o'chirmoqchimisiz? Bu amalni ortga qaytarib bo'lmaydi.</p>
+            <div className="grid grid-cols-2 gap-4">
+              <button 
+                onClick={() => setDeletingSaleId(null)}
+                className="py-4 bg-white/5 hover:bg-white/10 text-white font-black uppercase tracking-widest text-[10px] rounded-2xl transition-all border border-white/5"
+              >
+                Bekor qilish
+              </button>
+              <button 
+                onClick={() => {
+                  if (deletingSaleId) {
+                    removeSale(deletingSaleId);
+                    setDeletingSaleId(null);
+                  }
+                }}
+                className="py-4 bg-red-500 hover:bg-red-600 text-white font-black uppercase tracking-widest text-[10px] rounded-2xl transition-all shadow-lg shadow-red-500/20 border border-red-400/20"
+              >
+                O'chirish
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

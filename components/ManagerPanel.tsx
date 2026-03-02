@@ -29,6 +29,7 @@ import {
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine } from 'recharts';
 import L from 'leaflet';
 import { getTodayStr, isDateMatch, getLatenessStatus, getEarlyDepartureStatus, getUzTime } from '../utils';
+import { t, Language, translations } from '../translations';
 
 interface ManagerPanelProps {
   state: AppState;
@@ -42,6 +43,10 @@ interface ManagerPanelProps {
   setActiveTab: (tab: 'overview' | 'users' | 'reports' | 'approvals' | 'messages' | 'simcards') => void;
   addSimInventory: (company: string, count: number) => void;
   setMonthlyTarget: (month: string, targets: Record<string, number>, officeCounts?: Record<string, number>, mobileOfficeCounts?: Record<string, number>) => void;
+  addTariff: (company: string, tariff: string) => void;
+  removeTariff: (company: string, tariff: string) => void;
+  isDarkMode: boolean;
+  language: 'uz' | 'ru' | 'en';
 }
 
 
@@ -53,7 +58,7 @@ const getFormattedDateStr = (d: Date) => {
   return `${y}-${m}-${day}`;
 };
 
-const SingleLocationMap: React.FC<{ location: { lat: number; lng: number } | null, initials: string }> = ({ location, initials }) => {
+const SingleLocationMap: React.FC<{ location: { lat: number; lng: number } | null, initials: string, isDarkMode: boolean, language: Language }> = ({ location, initials, isDarkMode, language }) => {
   const mapRef = useRef<HTMLDivElement>(null);
   const leafletMap = useRef<L.Map | null>(null);
   const markerRef = useRef<L.Marker | null>(null);
@@ -67,7 +72,11 @@ const SingleLocationMap: React.FC<{ location: { lat: number; lng: number } | nul
         attributionControl: false
       }).setView([location.lat, location.lng], 16);
       
-      L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', { 
+      const tileUrl = isDarkMode 
+        ? 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png'
+        : 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png';
+        
+      L.tileLayer(tileUrl, { 
         maxZoom: 20 
       }).addTo(leafletMap.current);
 
@@ -96,6 +105,20 @@ const SingleLocationMap: React.FC<{ location: { lat: number; lng: number } | nul
   }, [location === null]);
 
   useEffect(() => {
+    if (leafletMap.current) {
+      leafletMap.current.eachLayer((layer) => {
+        if (layer instanceof L.TileLayer) {
+          leafletMap.current?.removeLayer(layer);
+        }
+      });
+      const tileUrl = isDarkMode 
+        ? 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png'
+        : 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png';
+      L.tileLayer(tileUrl, { maxZoom: 20 }).addTo(leafletMap.current);
+    }
+  }, [isDarkMode]);
+
+  useEffect(() => {
     if (leafletMap.current && location) {
       leafletMap.current.setView([location.lat, location.lng], 16);
       if (markerRef.current) {
@@ -113,8 +136,8 @@ const SingleLocationMap: React.FC<{ location: { lat: number; lng: number } | nul
   }, [location, initials]);
 
   if (!location) return (
-    <div className="h-56 flex flex-col items-center justify-center text-gray-300 italic font-black text-xs uppercase tracking-widest bg-gray-50 rounded-[2rem] border-2 border-dashed border-gray-100 p-8 text-center">
-      <div className="w-16 h-16 bg-white rounded-full flex items-center justify-center shadow-sm mb-4">
+    <div className="h-56 flex flex-col items-center justify-center text-white/20 italic font-black text-xs uppercase tracking-widest bg-brand-black rounded-[2rem] border-2 border-dashed border-white/10 p-8 text-center">
+      <div className="w-16 h-16 bg-brand-dark rounded-full flex items-center justify-center shadow-sm mb-4 border border-white/10">
         <MapPin className="w-8 h-8 opacity-20" />
       </div>
       Joylashuv ma'lumotlari topilmadi
@@ -122,21 +145,21 @@ const SingleLocationMap: React.FC<{ location: { lat: number; lng: number } | nul
   );
 
   return (
-    <div className="h-56 rounded-[2rem] overflow-hidden border border-gray-100 shadow-inner relative group">
+    <div className="h-56 rounded-[2rem] overflow-hidden border border-white/10 shadow-inner relative group">
       <div ref={mapRef} className="w-full h-full z-0" />
       <div className="absolute top-4 right-4 z-10 flex flex-col gap-2">
         <a 
           href={`https://www.google.com/maps?q=${location.lat},${location.lng}`} 
           target="_blank" 
           rel="noopener noreferrer"
-          className="bg-white/95 backdrop-blur-md p-2.5 rounded-xl shadow-lg border border-white text-blue-600 hover:text-blue-700 transition-all block hover:scale-105"
+          className="bg-brand-black/95 backdrop-blur-md p-2.5 rounded-xl shadow-lg border border-white/10 text-brand-gold hover:text-brand-gold/80 transition-all block hover:scale-105"
           title="Google Maps'da ko'rish"
         >
           <ExternalLink className="w-4 h-4" />
         </a>
       </div>
-      <div className="absolute bottom-4 left-6 z-10 bg-blue-600 text-white px-4 py-2 rounded-2xl text-[10px] font-black uppercase tracking-widest shadow-2xl ring-4 ring-white/30">
-        JONLI MANZIL
+      <div className="absolute bottom-4 left-6 z-10 bg-brand-gold text-brand-black px-4 py-2 rounded-2xl text-[10px] font-black uppercase tracking-widest shadow-2xl ring-4 ring-brand-gold/30">
+        {t(language, 'live_location')}
       </div>
     </div>
   );
@@ -164,7 +187,7 @@ const PhotoViewer: React.FC<{ photo: string; onClose: () => void }> = ({ photo, 
   </div>
 );
 
-const StaffMap: React.FC<{ checkIns: CheckIn[], reports: DailyReport[], users: User[], today: string, onUserSelect: (userId: string) => void }> = ({ checkIns, reports, users, today, onUserSelect }) => {
+const StaffMap: React.FC<{ checkIns: CheckIn[], reports: DailyReport[], users: User[], today: string, onUserSelect: (userId: string) => void, isDarkMode: boolean, language: Language }> = ({ checkIns, reports, users, today, onUserSelect, isDarkMode, language }) => {
   const mapRef = useRef<HTMLDivElement>(null);
   const leafletMap = useRef<L.Map | null>(null);
   const markersGroup = useRef<L.LayerGroup | null>(null);
@@ -198,7 +221,12 @@ const StaffMap: React.FC<{ checkIns: CheckIn[], reports: DailyReport[], users: U
   useEffect(() => {
     if (mapRef.current && !leafletMap.current) {
       leafletMap.current = L.map(mapRef.current, { scrollWheelZoom: true, dragging: true, zoomControl: false }).setView([41.311081, 69.240562], 12);
-      L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', { attribution: '&copy; CARTO', maxZoom: 20 }).addTo(leafletMap.current);
+      
+      const tileUrl = isDarkMode 
+        ? 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png'
+        : 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png';
+        
+      L.tileLayer(tileUrl, { attribution: '&copy; CARTO', maxZoom: 20 }).addTo(leafletMap.current);
       L.control.zoom({ position: 'bottomright' }).addTo(leafletMap.current);
       markersGroup.current = L.layerGroup().addTo(leafletMap.current);
       
@@ -221,13 +249,27 @@ const StaffMap: React.FC<{ checkIns: CheckIn[], reports: DailyReport[], users: U
   }, []);
 
   useEffect(() => {
+    if (leafletMap.current) {
+      leafletMap.current.eachLayer((layer) => {
+        if (layer instanceof L.TileLayer) {
+          leafletMap.current?.removeLayer(layer);
+        }
+      });
+      const tileUrl = isDarkMode 
+        ? 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png'
+        : 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png';
+      L.tileLayer(tileUrl, { maxZoom: 20 }).addTo(leafletMap.current);
+    }
+  }, [isDarkMode]);
+
+  useEffect(() => {
     if (leafletMap.current && markersGroup.current) {
       markersGroup.current.clearLayers();
       staffStatus.forEach(({ user, lastKnownLocation, todayCheckIn, isPresent, hasFinished }) => {
         if (!lastKnownLocation?.location) return;
         const lateness = todayCheckIn ? getLatenessStatus(todayCheckIn.timestamp, user.workingHours) : null;
         let statusColor = isPresent ? (hasFinished ? '#64748b' : (lateness?.isEarly ? '#3b82f6' : '#2563eb')) : '#ef4444';
-        let statusLabel = isPresent ? (hasFinished ? 'Tugatgan' : (lateness?.isEarly ? 'Erta Kelgan' : 'Ishda')) : 'Kelmagan';
+        let statusLabel = isPresent ? (hasFinished ? t(language, 'finished') : (lateness?.isEarly ? t(language, 'early_arrival') : t(language, 'at_work'))) : t(language, 'not_come');
         const initials = `${user.firstName?.[0] || ''}${user.lastName?.[0] || ''}`.toUpperCase();
 
         const customIcon = L.divIcon({
@@ -276,9 +318,9 @@ const StaffMap: React.FC<{ checkIns: CheckIn[], reports: DailyReport[], users: U
   }, [staffStatus, onUserSelect]);
 
   return (
-    <div className="relative w-full h-full rounded-[2.5rem] overflow-hidden border border-gray-100 shadow-2xl bg-white flex flex-col md:flex-row">
-      <div className="w-full md:w-64 bg-gray-50/90 backdrop-blur-md border-r border-gray-100 overflow-y-auto custom-scrollbar p-4 z-20">
-        <h4 className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-4">Xodimlar ({staffStatus.length})</h4>
+    <div className="relative w-full h-full rounded-[2.5rem] overflow-hidden border border-white/10 shadow-2xl bg-brand-dark flex flex-col md:flex-row">
+      <div className="w-full md:w-64 bg-brand-black/90 backdrop-blur-md border-r border-white/10 overflow-y-auto custom-scrollbar p-4 z-20">
+        <h4 className="text-[10px] font-black text-white/30 uppercase tracking-widest mb-4">{t(language, 'staff_count')} ({staffStatus.length})</h4>
         <div className="space-y-2">
           {staffStatus.map(({ user, todayCheckIn, isPresent, hasFinished }) => {
             const lateness = todayCheckIn ? getLatenessStatus(todayCheckIn.timestamp, user.workingHours) : null;
@@ -286,19 +328,19 @@ const StaffMap: React.FC<{ checkIns: CheckIn[], reports: DailyReport[], users: U
               <div 
                 key={user.id} 
                 onClick={() => onUserSelect(user.id)}
-                className={`p-2.5 rounded-xl border transition-all flex items-center gap-3 shadow-sm hover:shadow-md cursor-pointer ${lateness?.isLate ? 'bg-red-50 border-red-200' : (lateness?.isEarly ? 'bg-blue-50 border-blue-200' : 'bg-white border-gray-100')}`}
+                className={`p-2.5 rounded-xl border transition-all flex items-center gap-3 shadow-sm hover:shadow-md cursor-pointer ${lateness?.isLate ? 'bg-red-500/10 border-red-500/20' : (lateness?.isEarly ? 'bg-brand-gold/10 border-brand-gold/20' : 'bg-brand-black border-white/10')}`}
               >
-                <div className={`w-8 h-8 rounded-lg flex items-center justify-center font-black text-[10px] ${isPresent ? (lateness?.isLate ? 'bg-red-600 text-white' : (lateness?.isEarly ? 'bg-blue-600 text-white' : 'bg-blue-100 text-blue-600')) : 'bg-red-50 text-red-400'} overflow-hidden`}>
+                <div className={`w-8 h-8 rounded-lg flex items-center justify-center font-black text-[10px] ${isPresent ? (lateness?.isLate ? 'bg-red-600 text-white' : (lateness?.isEarly ? 'bg-brand-gold text-brand-black' : 'bg-brand-gold/20 text-brand-gold')) : 'bg-red-500/10 text-red-400'} overflow-hidden`}>
                   {user.photo ? (
-                    <img src={user.photo} alt={user.firstName} className="w-full h-full object-cover" />
+                    <img src={user.photo} alt={user.firstName} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
                   ) : (
                     <>{user.firstName?.[0]}</>
                   )}
                 </div>
                 <div className="flex-1 min-w-0">
-                  <p className="text-xs font-bold text-gray-800 truncate leading-none mb-1">{user.firstName} {user.lastName}</p>
+                  <p className="text-xs font-bold text-white truncate leading-none mb-1">{user.firstName} {user.lastName}</p>
                   <div className="flex items-center gap-1.5">
-                    <p className="text-[8px] font-black text-gray-400 uppercase tracking-wider">${isPresent ? (hasFinished ? 'Tugatgan' : (lateness?.isEarly ? 'Erta Kelgan' : 'Ishda')) : 'Kelmagan'}</p>
+                    <p className="text-[8px] font-black text-white/50 uppercase tracking-wider">{isPresent ? (hasFinished ? t(language, 'finished') : (lateness?.isEarly ? t(language, 'early_arrival') : t(language, 'at_work'))) : t(language, 'not_come')}</p>
                     {lateness?.isLate && <span className="text-[8px] bg-red-600 text-white px-1.5 py-0.5 rounded-md font-black animate-pulse shadow-sm shadow-red-200">LATE</span>}
                     {lateness?.isEarly && <span className="text-[8px] bg-blue-600 text-white px-1.5 py-0.5 rounded-md font-black animate-pulse shadow-sm shadow-blue-200">EARLY</span>}
                   </div>
@@ -310,13 +352,13 @@ const StaffMap: React.FC<{ checkIns: CheckIn[], reports: DailyReport[], users: U
       </div>
       <div className="flex-1 relative">
         <div ref={mapRef} className="w-full h-full min-h-[400px] z-10" />
-        <button onClick={fitToMarkers} className="absolute top-4 right-4 z-[20] p-3 bg-white/95 rounded-xl shadow-lg border border-white text-blue-600 active:scale-95 transition-all"><Navigation2 className="w-4 h-4 fill-current" /></button>
+        <button onClick={fitToMarkers} className="absolute top-4 right-4 z-[20] p-3 bg-brand-black/95 rounded-xl shadow-lg border border-white/10 text-brand-gold active:scale-95 transition-all"><Navigation2 className="w-4 h-4 fill-current" /></button>
       </div>
     </div>
   );
 };
 
-const ManagerPanel: React.FC<ManagerPanelProps> = ({ state, approveUser, updateUser, updateCheckIn, updateReport, addMessage, markMessageAsRead, activeTab, setActiveTab, addSimInventory, setMonthlyTarget }) => {
+const ManagerPanel: React.FC<ManagerPanelProps> = ({ state, approveUser, updateUser, updateCheckIn, updateReport, addMessage, markMessageAsRead, activeTab, setActiveTab, addSimInventory, setMonthlyTarget, addTariff, removeTariff, isDarkMode, language }) => {
   const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
   const [selectedDay, setSelectedDay] = useState<string | null>(null);
   const [editingTime, setEditingTime] = useState<{ type: 'checkIn' | 'checkOut', current: string } | null>(null);
@@ -361,6 +403,17 @@ const ManagerPanel: React.FC<ManagerPanelProps> = ({ state, approveUser, updateU
     'Beeline': '0',
     'Uztelecom': '0'
   });
+  const [showTariffForm, setShowTariffForm] = useState(false);
+  const [newTariff, setNewTariff] = useState({ company: 'Ucell', name: '' });
+  const [openDropdown, setOpenDropdown] = useState<'tariffCompany' | null>(null);
+
+  const formatLargeNumber = (val: any) => {
+    const num = Number(val);
+    if (isNaN(num)) return '0';
+    if (num > 999999999) return '999M+';
+    if (num >= 1000000) return (num / 1000000).toFixed(1) + 'M';
+    return Math.round(num).toLocaleString('uz-UZ');
+  };
 
   const [inventoryModalUser, setInventoryModalUser] = useState<User | null>(null);
   const [inventoryForm, setInventoryForm] = useState<Record<string, string>>({
@@ -450,7 +503,7 @@ const ManagerPanel: React.FC<ManagerPanelProps> = ({ state, approveUser, updateU
       d.setMonth(d.getMonth() + monthOffset);
       return d.toLocaleDateString('uz-UZ', { month: 'long', year: 'numeric' });
     }
-    if (chartTimeframe === 'year') return `Yillik - ${selectedYear}`;
+    if (chartTimeframe === 'year') return `${t(language, 'yearly')} - ${selectedYear}`;
     return '';
   }, [chartTimeframe, monthOffset, selectedYear]);
 
@@ -523,47 +576,47 @@ const ManagerPanel: React.FC<ManagerPanelProps> = ({ state, approveUser, updateU
       
       {isSendMessageModalOpen && (
         <div className="fixed inset-0 z-[150] flex items-center justify-center p-4 animate-in fade-in duration-300">
-          <div className="absolute inset-0 bg-gray-900/60 backdrop-blur-md" onClick={() => setIsSendMessageModalOpen(false)}></div>
-          <div className="bg-white w-full max-w-lg rounded-[2.5rem] shadow-2xl relative z-10 overflow-hidden animate-in zoom-in-95 duration-300">
-            <div className="p-8 border-b border-gray-100 flex items-center justify-between bg-gradient-to-br from-blue-50 to-indigo-50/30">
+          <div className="absolute inset-0 bg-black/60 backdrop-blur-md" onClick={() => setIsSendMessageModalOpen(false)}></div>
+          <div className="bg-brand-dark w-full max-w-lg rounded-[2.5rem] shadow-2xl relative z-10 overflow-hidden animate-in zoom-in-95 duration-300 border border-white/10">
+            <div className="p-8 border-b border-white/5 flex items-center justify-between bg-brand-black">
               <div className="flex items-center gap-3">
-                <div className="p-3 bg-blue-600 text-white rounded-2xl shadow-lg shadow-blue-100">
+                <div className="p-3 bg-brand-gold text-brand-black rounded-2xl shadow-lg">
                   <Send className="w-5 h-5" />
                 </div>
                 <div>
-                  <h3 className="text-xl font-black text-gray-800 tracking-tight">Xabar yuborish</h3>
-                  <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mt-0.5">Yangi xabar yaratish</p>
+                  <h3 className="text-xl font-black text-white tracking-tight">Xabar yuborish</h3>
+                  <p className="text-[10px] font-black text-white/30 uppercase tracking-widest mt-0.5">Yangi xabar yaratish</p>
                 </div>
               </div>
-              <button onClick={() => setIsSendMessageModalOpen(false)} className="p-2 bg-white rounded-xl text-gray-400 hover:text-gray-900 transition shadow-sm border border-gray-100">
+              <button onClick={() => setIsSendMessageModalOpen(false)} className="p-2 bg-brand-black rounded-xl text-white/40 hover:text-white transition shadow-sm border border-white/10">
                 <X className="w-5 h-5" />
               </button>
             </div>
             
             <div className="p-8 space-y-6">
               <div className="relative">
-                <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest block mb-2 ml-1">Qabul qiluvchi</label>
+                <label className="text-[10px] font-black text-white/30 uppercase tracking-widest block mb-2 ml-1">Qabul qiluvchi</label>
                 <div 
                   onClick={() => setIsRecipientDropdownOpen(!isRecipientDropdownOpen)}
-                  className="w-full p-4 bg-gray-50 border border-gray-100 rounded-2xl text-sm font-bold text-gray-800 focus:ring-2 focus:ring-blue-500 outline-none transition shadow-inner flex items-center justify-between cursor-pointer"
+                  className="w-full p-4 bg-brand-black border border-white/10 rounded-2xl text-sm font-bold text-white focus:border-brand-gold outline-none transition shadow-inner flex items-center justify-between cursor-pointer"
                 >
                   <span>
                     {messageRecipientId === 'all' 
                       ? 'Barchaga (Hamma xodimlar)' 
                       : operators.find(op => op.id === messageRecipientId)?.firstName + ' ' + operators.find(op => op.id === messageRecipientId)?.lastName}
                   </span>
-                  <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform ${isRecipientDropdownOpen ? 'rotate-180' : ''}`} />
+                  <ChevronDown className={`w-4 h-4 text-white/40 transition-transform ${isRecipientDropdownOpen ? 'rotate-180' : ''}`} />
                 </div>
                 
                 {isRecipientDropdownOpen && (
-                  <div className="absolute top-full left-0 right-0 mt-2 bg-white border border-gray-100 rounded-2xl shadow-2xl z-[160] overflow-hidden animate-in slide-in-from-top-2 duration-200">
+                  <div className="absolute top-full left-0 right-0 mt-2 bg-brand-dark border border-white/10 rounded-2xl shadow-2xl z-[160] overflow-hidden animate-in slide-in-from-top-2 duration-200">
                     <div className="max-h-60 overflow-y-auto no-scrollbar">
                       <div 
                         onClick={() => {
                           setMessageRecipientId('all');
                           setIsRecipientDropdownOpen(false);
                         }}
-                        className={`p-4 text-sm font-bold cursor-pointer transition-colors ${messageRecipientId === 'all' ? 'bg-blue-50 text-blue-600' : 'text-gray-700 hover:bg-gray-50'}`}
+                        className={`p-4 text-sm font-bold cursor-pointer transition-colors ${messageRecipientId === 'all' ? 'bg-brand-gold/10 text-brand-gold' : 'text-white/60 hover:bg-white/5'}`}
                       >
                         Barchaga (Hamma xodimlar)
                       </div>
@@ -574,11 +627,11 @@ const ManagerPanel: React.FC<ManagerPanelProps> = ({ state, approveUser, updateU
                             setMessageRecipientId(op.id);
                             setIsRecipientDropdownOpen(false);
                           }}
-                          className={`p-4 text-sm font-bold cursor-pointer transition-colors border-t border-gray-50 ${messageRecipientId === op.id ? 'bg-blue-50 text-blue-600' : 'text-gray-700 hover:bg-gray-50'}`}
+                          className={`p-4 text-sm font-bold cursor-pointer transition-colors border-t border-white/5 ${messageRecipientId === op.id ? 'bg-brand-gold/10 text-brand-gold' : 'text-white/60 hover:bg-white/5'}`}
                         >
                           <div className="flex items-center justify-between">
                             <span>{op.firstName} {op.lastName}</span>
-                            <span className="text-[8px] font-black uppercase tracking-widest text-gray-400">{op.role.replace('_', ' ')}</span>
+                            <span className="text-[8px] font-black uppercase tracking-widest text-white/30">{op.role.replace('_', ' ')}</span>
                           </div>
                         </div>
                       ))}
@@ -588,9 +641,9 @@ const ManagerPanel: React.FC<ManagerPanelProps> = ({ state, approveUser, updateU
               </div>
               
               <div>
-                <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest block mb-2 ml-1">Xabar matni</label>
+                <label className="text-[10px] font-black text-white/30 uppercase tracking-widest block mb-2 ml-1">Xabar matni</label>
                 <textarea 
-                  className="w-full p-6 bg-gray-50 border border-gray-100 rounded-[2rem] text-sm font-medium text-gray-800 focus:ring-2 focus:ring-blue-500 outline-none transition shadow-inner"
+                  className="w-full p-6 bg-brand-black border border-white/10 rounded-[2rem] text-sm font-medium text-white focus:border-brand-gold outline-none transition shadow-inner"
                   rows={4}
                   placeholder="Xabaringizni yozing..."
                   value={messageText}
@@ -607,7 +660,7 @@ const ManagerPanel: React.FC<ManagerPanelProps> = ({ state, approveUser, updateU
                   setMessageText('');
                   alert("Xabar muvaffaqiyatli yuborildi!");
                 }}
-                className="w-full py-5 bg-blue-600 text-white rounded-[2rem] font-black uppercase tracking-widest text-[10px] shadow-xl shadow-blue-100 hover:bg-blue-700 active:scale-95 transition-all flex items-center justify-center gap-3"
+                className="w-full py-5 gold-gradient text-brand-black rounded-[2rem] font-black uppercase tracking-widest text-[10px] shadow-xl shadow-brand-gold/20 hover:scale-[1.02] active:scale-95 transition-all flex items-center justify-center gap-3"
               >
                 Xabarni yuborish <Send className="w-4 h-4" />
               </button>
@@ -619,30 +672,30 @@ const ManagerPanel: React.FC<ManagerPanelProps> = ({ state, approveUser, updateU
       {activeTab === 'overview' && (
         <div className="space-y-8 animate-in fade-in duration-500">
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-            <StatCard label="Ucell" value={state.sales.filter(s => s.date === today && s.company === 'Ucell').reduce((sum, s) => sum + s.count, 0)} icon={<Smartphone />} color="bg-purple-600" />
-            <StatCard label="Mobiuz" value={state.sales.filter(s => s.date === today && s.company === 'Mobiuz').reduce((sum, s) => sum + s.count, 0)} icon={<Smartphone />} color="bg-red-600" />
-            <StatCard label="Beeline" value={state.sales.filter(s => s.date === today && s.company === 'Beeline').reduce((sum, s) => sum + s.count, 0)} icon={<Smartphone />} color="bg-yellow-500" />
-            <StatCard label="Uztelecom" value={state.sales.filter(s => s.date === today && s.company === 'Uztelecom').reduce((sum, s) => sum + s.count, 0)} icon={<Smartphone />} color="bg-blue-600" />
+            <StatCard label="Ucell" value={state.sales.filter(s => s.date === today && s.company === 'Ucell').reduce((sum, s) => sum + s.count + (s.bonus || 0), 0)} icon={<Smartphone />} color="bg-[#9b51e0]" />
+            <StatCard label="Uztelecom" value={state.sales.filter(s => s.date === today && s.company === 'Uztelecom').reduce((sum, s) => sum + s.count + (s.bonus || 0), 0)} icon={<Smartphone />} color="bg-[#009ee0]" />
+            <StatCard label="Mobiuz" value={state.sales.filter(s => s.date === today && s.company === 'Mobiuz').reduce((sum, s) => sum + s.count + (s.bonus || 0), 0)} icon={<Smartphone />} color="bg-[#eb1c24]" />
+            <StatCard label="Beeline" value={state.sales.filter(s => s.date === today && s.company === 'Beeline').reduce((sum, s) => sum + s.count + (s.bonus || 0), 0)} icon={<Smartphone />} color="bg-[#fdb913]" />
           </div>
 
-          <section className="bg-white rounded-[2.5rem] border border-gray-100 shadow-sm overflow-hidden">
-            <div className="p-6 border-b border-gray-50 flex items-center gap-3">
-              <div className="p-2.5 bg-blue-50 rounded-xl text-blue-600"><Trophy className="w-5 h-5" /></div>
-              <h3 className="text-lg font-black text-gray-800 tracking-tight">Xodimlar Samaradorligi</h3>
+          <section className="bg-brand-dark rounded-[2.5rem] border border-white/10 shadow-sm overflow-hidden">
+            <div className="p-6 border-b border-white/5 flex items-center gap-3 bg-brand-black">
+              <div className="p-2.5 bg-brand-gold/10 rounded-xl text-brand-gold"><Trophy className="w-5 h-5" /></div>
+              <h3 className="text-lg font-black text-white tracking-tight">{t(language, 'staff_efficiency')}</h3>
             </div>
             <div className="overflow-x-auto">
               <table className="w-full text-left">
-                <thead className="bg-gray-50/50 text-[9px] font-black text-gray-400 uppercase tracking-widest">
+                <thead className="bg-brand-black text-[9px] font-black text-white/30 uppercase tracking-widest">
                   <tr>
                     <th className="px-8 py-4 w-16 text-center">#</th>
-                    <th className="px-8 py-4">Xodim</th>
-                    <th className="px-8 py-4">Lavozim</th>
-                    <th className="px-8 py-4 text-center">Bugungi Sotuv</th>
-                    <th className="px-8 py-4 text-center">Oylik Sotuv</th>
-                    <th className="px-8 py-4 text-right">Mavqei</th>
+                    <th className="px-8 py-4">{t(language, 'employee')}</th>
+                    <th className="px-8 py-4">{t(language, 'position')}</th>
+                    <th className="px-8 py-4 text-center">{t(language, 'today_sales')}</th>
+                    <th className="px-8 py-4 text-center">{t(language, 'monthly_sales')}</th>
+                    <th className="px-8 py-4 text-right">{t(language, 'status')}</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-gray-50">
+                <tbody className="divide-y divide-white/5">
                   {[...operators]
                     .sort((a, b) => getUserSalesCount(b.id, 'month') - getUserSalesCount(a.id, 'month'))
                     .slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage)
@@ -657,7 +710,7 @@ const ManagerPanel: React.FC<ManagerPanelProps> = ({ state, approveUser, updateU
                     return (
                       <tr 
                         key={op.id} 
-                        className={`transition group cursor-pointer ${lateness?.isLate ? 'bg-red-50/50 hover:bg-red-100/50' : (lateness?.isEarly ? 'bg-blue-50/50 hover:bg-blue-100/50' : 'hover:bg-blue-50/30')}`}
+                        className={`transition group cursor-pointer ${lateness?.isLate ? 'bg-red-500/5 hover:bg-red-500/10' : (lateness?.isEarly ? 'bg-brand-gold/5 hover:bg-brand-gold/10' : 'hover:bg-white/5')}`}
                         onClick={() => {
                           setSelectedUserId(op.id);
                           setSelectedDay(null); // Defaults to today
@@ -666,51 +719,51 @@ const ManagerPanel: React.FC<ManagerPanelProps> = ({ state, approveUser, updateU
                       >
                         <td className="px-8 py-5 text-center">
                           <div className={`w-8 h-8 rounded-lg flex items-center justify-center font-black text-sm ${
-                            globalIdx === 0 ? 'bg-yellow-100 text-yellow-600' :
-                            globalIdx === 1 ? 'bg-slate-200 text-slate-600' :
-                            globalIdx === 2 ? 'bg-orange-100 text-orange-600' :
-                            'bg-gray-50 text-gray-400'
+                            globalIdx === 0 ? 'bg-brand-gold text-brand-black shadow-lg shadow-brand-gold/20' :
+                            globalIdx === 1 ? 'bg-white/20 text-white' :
+                            globalIdx === 2 ? 'bg-white/10 text-white/60' :
+                            'bg-brand-black text-white/20'
                           }`}>
                             {globalIdx + 1}
                           </div>
                         </td>
                         <td className="px-8 py-5">
                           <div className="flex items-center gap-3">
-                            <div className={`w-9 h-9 rounded-xl flex items-center justify-center font-black text-xs border ${lateness?.isLate ? 'bg-red-600 text-white border-red-700 shadow-sm' : (lateness?.isEarly ? 'bg-blue-600 text-white border-blue-700 shadow-sm' : 'bg-gradient-to-br from-indigo-50 to-blue-50 text-blue-600 border-blue-100/50')} overflow-hidden`}>
+                            <div className={`w-9 h-9 rounded-xl flex items-center justify-center font-black text-xs border ${lateness?.isLate ? 'bg-red-600 text-white border-red-700 shadow-sm' : (lateness?.isEarly ? 'bg-brand-gold text-brand-black border-brand-gold shadow-sm' : 'bg-brand-black text-brand-gold border-white/10')} overflow-hidden`}>
                               {op.photo ? (
-                                <img src={op.photo} alt={op.firstName} className="w-full h-full object-cover" />
+                                <img src={op.photo} alt={op.firstName} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
                               ) : (
                                 <>{op.firstName?.[0]}{op.lastName?.[0]}</>
                               )}
                             </div>
                             <div className="flex flex-col">
-                              <span className="font-bold text-gray-800">{op.firstName} {op.lastName}</span>
-                              {lateness?.isLate && <span className="text-[8px] font-black text-red-600 uppercase tracking-widest">Kechikkan: {lateness.durationStr}</span>}
-                              {lateness?.isEarly && <span className="text-[8px] font-black text-blue-600 uppercase tracking-widest">Erta Kelgan: {lateness.durationStr}</span>}
+                              <span className="font-bold text-white">{op.firstName} {op.lastName}</span>
+                              {lateness?.isLate && <span className="text-[8px] font-black text-red-500 uppercase tracking-widest">{t(language, 'late')}: {lateness.durationStr}</span>}
+                              {lateness?.isEarly && <span className="text-[8px] font-black text-brand-gold uppercase tracking-widest">{t(language, 'early_arrival')}: {lateness.durationStr}</span>}
                             </div>
                           </div>
                         </td>
                         <td className="px-8 py-5">
-                          <span className="text-[10px] font-black text-gray-400 uppercase tracking-tighter bg-gray-100 px-2 py-1 rounded-md">
+                          <span className="text-[10px] font-black text-white/30 uppercase tracking-tighter bg-white/5 px-2 py-1 rounded-md">
                             {op.role.replace('_', ' ')}
                           </span>
                         </td>
                         <td className="px-8 py-5 text-center">
                           <div className="inline-flex flex-col">
-                            <span className="text-xl font-black text-blue-600">{todayCount}</span>
-                            <span className="text-[8px] font-black text-gray-300 uppercase">dona</span>
+                            <span className="text-xl font-black text-brand-gold">{todayCount}</span>
+                            <span className="text-[8px] font-black text-white/20 uppercase">dona</span>
                           </div>
                         </td>
                         <td className="px-8 py-5 text-center">
                           <div className="inline-flex flex-col">
-                            <span className="text-xl font-black text-indigo-600">{monthCount}</span>
-                            <span className="text-[8px] font-black text-gray-300 uppercase">dona</span>
+                            <span className="text-xl font-black text-white">{monthCount}</span>
+                            <span className="text-[8px] font-black text-white/20 uppercase">dona</span>
                           </div>
                         </td>
                         <td className="px-8 py-5 text-right">
                           <div className="flex items-center justify-end gap-1.5">
                             {[1, 2, 3, 4, 5].map(star => (
-                              <div key={star} className={`w-1.5 h-1.5 rounded-full ${monthCount > (star * 20) ? 'bg-orange-400' : 'bg-gray-200'}`}></div>
+                              <div key={star} className={`w-1.5 h-1.5 rounded-full ${monthCount > (star * 20) ? 'bg-brand-gold' : 'bg-white/10'}`}></div>
                             ))}
                           </div>
                         </td>
@@ -720,35 +773,41 @@ const ManagerPanel: React.FC<ManagerPanelProps> = ({ state, approveUser, updateU
                 </tbody>
               </table>
               {operators.length > itemsPerPage && (
-                <div className="flex items-center justify-center gap-2 p-4 border-t border-gray-50">
+                <div className="flex items-center justify-center gap-2 p-4 border-t border-white/5">
                   <button 
-                    onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                    onClick={() => {
+                      setCurrentPage(p => Math.max(1, p - 1));
+                      window.scrollTo({ top: 0, behavior: 'smooth' });
+                    }}
                     disabled={currentPage === 1}
-                    className="p-2 rounded-lg hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                    className="p-2 rounded-lg hover:bg-white/5 disabled:opacity-20 disabled:cursor-not-allowed transition-colors"
                   >
-                    <ChevronLeft className="w-4 h-4 text-gray-600" />
+                    <ChevronLeft className="w-4 h-4 text-white/60" />
                   </button>
-                  <span className="text-xs font-bold text-gray-600">
+                  <span className="text-xs font-bold text-white/60">
                     {currentPage} / {Math.ceil(operators.length / itemsPerPage)}
                   </span>
                   <button 
-                    onClick={() => setCurrentPage(p => Math.min(Math.ceil(operators.length / itemsPerPage), p + 1))}
+                    onClick={() => {
+                      setCurrentPage(p => Math.min(Math.ceil(operators.length / itemsPerPage), p + 1));
+                      window.scrollTo({ top: 0, behavior: 'smooth' });
+                    }}
                     disabled={currentPage === Math.ceil(operators.length / itemsPerPage)}
-                    className="p-2 rounded-lg hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                    className="p-2 rounded-lg hover:bg-white/5 disabled:opacity-20 disabled:cursor-not-allowed transition-colors"
                   >
-                    <ChevronRight className="w-4 h-4 text-gray-600" />
+                    <ChevronRight className="w-4 h-4 text-white/60" />
                   </button>
                 </div>
               )}
             </div>
           </section>
 
-          <div className="bg-white p-4 rounded-3xl shadow-sm border border-gray-100 h-[650px] flex flex-col">
-            <div className="p-2 mb-2 border-b border-gray-50 flex items-center justify-between">
-              <h3 className="text-base font-black text-gray-800 flex items-center gap-2"><MapPin className="w-4 h-4 text-blue-600" /> Jonli Monitoring</h3>
-              <span className="text-[9px] font-black text-gray-400 uppercase tracking-widest">{today}</span>
+          <div className="bg-brand-dark p-4 rounded-3xl shadow-sm border border-white/10 h-[650px] flex flex-col">
+            <div className="p-2 mb-2 border-b border-white/5 flex items-center justify-between">
+              <h3 className="text-base font-black text-white flex items-center gap-2"><MapPin className="w-4 h-4 text-brand-gold" /> Jonli Monitoring</h3>
+              <span className="text-[9px] font-black text-white/30 uppercase tracking-widest">{today}</span>
             </div>
-            <div className="flex-1 overflow-hidden"><StaffMap checkIns={state.checkIns} reports={state.reports} users={state.users} today={today} onUserSelect={setSelectedUserId} /></div>
+            <div className="flex-1 overflow-hidden"><StaffMap checkIns={state.checkIns} reports={state.reports} users={state.users} today={today} onUserSelect={setSelectedUserId} isDarkMode={isDarkMode} language={language} /></div>
           </div>
         </div>
       )}
@@ -756,10 +815,10 @@ const ManagerPanel: React.FC<ManagerPanelProps> = ({ state, approveUser, updateU
       {activeTab === 'users' && (
         <div className="space-y-6 animate-in fade-in">
           <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-            <h2 className="text-2xl font-black text-gray-800">Xodimlar Jamoasi</h2>
+            <h2 className="text-2xl font-black text-white">{t(language, 'staff_team')}</h2>
             <div className="relative w-full md:w-96">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-              <input type="text" placeholder="Xodimni qidirish..." className="w-full pl-10 pr-4 py-3 border border-gray-200 rounded-2xl bg-white focus:ring-2 focus:ring-blue-500 transition outline-none" value={searchTerm} onChange={e => setSearchTerm(e.target.value)} />
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-white/30" />
+              <input type="text" placeholder="Xodimni qidirish..." className="w-full pl-10 pr-4 py-3 border border-white/10 rounded-2xl bg-brand-black focus:border-brand-gold transition outline-none text-white font-bold" value={searchTerm} onChange={e => setSearchTerm(e.target.value)} />
             </div>
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
@@ -768,25 +827,25 @@ const ManagerPanel: React.FC<ManagerPanelProps> = ({ state, approveUser, updateU
               const lateness = todayCheckIn ? getLatenessStatus(todayCheckIn.timestamp, u.workingHours) : null;
               
               return (
-                <div key={u.id} onClick={() => { setSelectedUserId(u.id); setChartTimeframe('week'); setSelectedDay(null); }} className={`p-6 rounded-[2.5rem] border shadow-sm hover:shadow-xl hover:-translate-y-1 transition-all cursor-pointer group text-center relative overflow-hidden ${lateness?.isLate ? 'bg-red-50 border-red-200' : (lateness?.isEarly ? 'bg-blue-50 border-blue-200' : 'bg-white border-gray-100')}`}>
+                <div key={u.id} onClick={() => { setSelectedUserId(u.id); setChartTimeframe('week'); setSelectedDay(null); }} className={`p-6 rounded-[2.5rem] border shadow-sm hover:shadow-xl hover:-translate-y-1 transition-all cursor-pointer group text-center relative overflow-hidden ${lateness?.isLate ? 'bg-red-500/10 border-red-500/20' : (lateness?.isEarly ? 'bg-brand-gold/10 border-brand-gold/20' : 'bg-brand-dark border-white/10')}`}>
                   {lateness?.isLate && (
                     <div className="absolute top-4 right-4 bg-red-600 text-white text-[8px] font-black px-2 py-1 rounded-full uppercase tracking-tighter shadow-md animate-pulse z-10">LATE</div>
                   )}
                   {lateness?.isEarly && (
-                    <div className="absolute top-4 right-4 bg-blue-600 text-white text-[8px] font-black px-2 py-1 rounded-full uppercase tracking-tighter shadow-md animate-pulse z-10">EARLY</div>
+                    <div className="absolute top-4 right-4 bg-brand-gold text-brand-black text-[8px] font-black px-2 py-1 rounded-full uppercase tracking-tighter shadow-md animate-pulse z-10">EARLY</div>
                   )}
-                  <div className={`w-20 h-20 rounded-[1.8rem] flex items-center justify-center mx-auto mb-4 font-black text-2xl group-hover:scale-110 transition-transform ${lateness?.isLate ? 'bg-red-600 text-white shadow-lg shadow-red-200' : (lateness?.isEarly ? 'bg-blue-600 text-white shadow-lg shadow-blue-200' : 'bg-gradient-to-br from-blue-100 to-indigo-100 text-blue-600')} overflow-hidden`}>
+                  <div className={`w-20 h-20 rounded-[1.8rem] flex items-center justify-center mx-auto mb-4 font-black text-2xl group-hover:scale-110 transition-transform ${lateness?.isLate ? 'bg-red-600 text-white shadow-lg shadow-red-200' : (lateness?.isEarly ? 'bg-brand-gold text-brand-black shadow-lg shadow-brand-gold/20' : 'bg-brand-black text-brand-gold border border-white/10')} overflow-hidden`}>
                     {u.photo ? (
-                      <img src={u.photo} alt={u.firstName} className="w-full h-full object-cover" />
+                      <img src={u.photo} alt={u.firstName} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
                     ) : (
                       <>{u.firstName?.[0]}{u.lastName?.[0]}</>
                     )}
                   </div>
-                  <h3 className="text-lg font-black text-gray-800">{u.firstName} {u.lastName}</h3>
-                  <p className="text-[10px] font-black uppercase text-gray-400 tracking-widest mt-1">{u.role.replace('_', ' ')}</p>
-                  <div className="mt-4 pt-4 border-t border-gray-50 flex justify-around">
-                    <div className="text-center"><p className="text-[10px] font-black text-gray-400 uppercase">Bugun</p><p className={`font-black ${lateness?.isLate ? 'text-red-600' : (lateness?.isEarly ? 'text-blue-600' : 'text-blue-600')}`}>{getUserSalesCount(u.id, 'today')}</p></div>
-                    <div className="text-center"><p className="text-[10px] font-black text-gray-400 uppercase">Oy</p><p className="font-black text-gray-800">{getUserSalesCount(u.id, 'month')}</p></div>
+                  <h3 className="text-lg font-black text-white">{u.firstName} {u.lastName}</h3>
+                  <p className="text-[10px] font-black uppercase text-white/30 tracking-widest mt-1">{u.role.replace('_', ' ')}</p>
+                  <div className="mt-4 pt-4 border-t border-white/5 flex justify-around">
+                    <div className="text-center"><p className="text-[10px] font-black text-white/30 uppercase">{t(language, 'today')}</p><p className={`font-black ${lateness?.isLate ? 'text-red-600' : 'text-brand-gold'}`}>{getUserSalesCount(u.id, 'today')}</p></div>
+                    <div className="text-center"><p className="text-[10px] font-black text-white/30 uppercase">{t(language, 'month')}</p><p className="font-black text-white">{getUserSalesCount(u.id, 'month')}</p></div>
                   </div>
                 </div>
               );
@@ -797,24 +856,24 @@ const ManagerPanel: React.FC<ManagerPanelProps> = ({ state, approveUser, updateU
 
       {selectedUser && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center animate-in fade-in duration-300">
-              <div className="absolute inset-0 bg-gray-900/40 backdrop-blur-xl" onClick={() => { setSelectedUserId(null); setSelectedDay(null); }}></div>
-              <div className="bg-gray-50 w-full h-full md:h-[92vh] md:w-[92vw] md:rounded-[3rem] shadow-2xl relative z-10 overflow-hidden flex flex-col animate-in slide-in-from-bottom-12">
-                <div className="p-6 md:p-8 border-b border-gray-100 flex items-center justify-between bg-white sticky top-0 z-50">
+              <div className="absolute inset-0 bg-black/60 backdrop-blur-xl" onClick={() => { setSelectedUserId(null); setSelectedDay(null); }}></div>
+              <div className="bg-brand-black w-full h-full md:h-[92vh] md:w-[92vw] md:rounded-[3rem] shadow-2xl relative z-10 overflow-hidden flex flex-col animate-in slide-in-from-bottom-12 border border-white/10">
+                <div className="p-6 md:p-8 border-b border-white/10 flex items-center justify-between bg-brand-dark sticky top-0 z-50">
                   <div className="flex items-center gap-6">
-                    <button onClick={() => { setSelectedUserId(null); setSelectedDay(null); }} className="p-3 bg-gray-100 rounded-2xl text-gray-400 hover:text-gray-900 transition shadow-sm border border-gray-100"><ArrowLeft className="w-6 h-6" /></button>
+                    <button onClick={() => { setSelectedUserId(null); setSelectedDay(null); }} className="p-3 bg-brand-black rounded-2xl text-white/40 hover:text-white transition shadow-sm border border-white/10"><ArrowLeft className="w-6 h-6" /></button>
                     <div className="flex items-center gap-4">
-                      <div className="w-14 h-14 bg-blue-600 text-white rounded-[1.5rem] flex items-center justify-center font-black text-2xl uppercase shadow-xl ring-4 ring-blue-50 overflow-hidden">
+                      <div className="w-14 h-14 bg-brand-gold text-brand-black rounded-[1.5rem] flex items-center justify-center font-black text-2xl uppercase shadow-xl ring-4 ring-brand-gold/10 overflow-hidden">
                         {selectedUser.photo ? (
-                          <img src={selectedUser.photo} alt={selectedUser.firstName} className="w-full h-full object-cover" />
+                          <img src={selectedUser.photo} alt={selectedUser.firstName} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
                         ) : (
                           <>{selectedUser.firstName?.[0]}{selectedUser.lastName?.[0]}</>
                         )}
                       </div>
                       <div>
-                        <h2 className="text-2xl font-black text-gray-800 leading-none mb-2">{selectedUser.firstName} {selectedUser.lastName}</h2>
+                        <h2 className="text-2xl font-black text-white leading-none mb-2">{selectedUser.firstName} {selectedUser.lastName}</h2>
                         <div className="flex items-center gap-2">
-                          <span className="bg-blue-600 text-white text-[8px] font-black px-2.5 py-1 rounded-full uppercase tracking-widest shadow-sm">{selectedUser.role.replace('_', ' ')}</span>
-                          <span className="text-gray-400 text-[10px] font-bold">● {selectedUser.phone}</span>
+                          <span className="bg-brand-gold text-brand-black text-[8px] font-black px-2.5 py-1 rounded-full uppercase tracking-widest shadow-sm">{selectedUser.role.replace('_', ' ')}</span>
+                          <span className="text-white/40 text-[10px] font-bold">● {selectedUser.phone}</span>
                         </div>
                       </div>
                     </div>
@@ -833,17 +892,17 @@ const ManagerPanel: React.FC<ManagerPanelProps> = ({ state, approveUser, updateU
                             setTempEndTime('');
                           }
                         }}
-                        className="appearance-none bg-blue-50 text-blue-600 pl-10 pr-10 py-3 rounded-2xl text-[11px] font-black uppercase tracking-widest outline-none focus:ring-1 focus:ring-gray-200 cursor-pointer hover:bg-blue-100 active:scale-[0.98] transition-all border border-transparent focus:border-gray-200 flex items-center gap-2 min-w-[180px]"
+                        className="appearance-none bg-brand-gold/10 text-brand-gold pl-10 pr-10 py-3 rounded-2xl text-[11px] font-black uppercase tracking-widest outline-none focus:border-brand-gold cursor-pointer hover:bg-brand-gold/20 active:scale-[0.98] transition-all border border-white/10 flex items-center gap-2 min-w-[180px]"
                       >
                         <span>{selectedUser.workingHours || "Vaqtni tanlang"}</span>
                       </button>
-                      <Clock className="w-4 h-4 text-blue-600 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+                      <Clock className="w-4 h-4 text-brand-gold absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
                       <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none transition-transform duration-200" style={{ transform: isTimeDropdownOpen ? 'translateY(-50%) rotate(180deg)' : 'translateY(-50%)' }}>
-                        <ChevronRight className="w-3 h-3 text-blue-600 rotate-90" />
+                        <ChevronRight className="w-3 h-3 text-brand-gold rotate-90" />
                       </div>
 
                       {isTimeDropdownOpen && (
-                        <div className="absolute top-full right-0 mt-2 w-72 bg-white rounded-2xl shadow-xl shadow-gray-200/40 border border-gray-100 overflow-hidden z-50 animate-in fade-in zoom-in-95 duration-200 p-4">
+                        <div className="absolute top-full right-0 mt-2 w-72 bg-brand-dark rounded-2xl shadow-xl border border-white/10 overflow-hidden z-50 animate-in fade-in zoom-in-95 duration-200 p-4">
                           <style>{`
                             .time-picker-input::-webkit-calendar-picker-indicator {
                               position: absolute;
@@ -859,23 +918,23 @@ const ManagerPanel: React.FC<ManagerPanelProps> = ({ state, approveUser, updateU
                           `}</style>
                           <div className="space-y-4">
                             <div>
-                              <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest block mb-1.5">Ish boshlash</label>
+                              <label className="text-[10px] font-black text-white/30 uppercase tracking-widest block mb-1.5">Ish boshlash</label>
                               <input 
                                 type="time" 
                                 value={tempStartTime}
                                 onClick={(e) => { try { (e.currentTarget as any).showPicker(); } catch (err) {} }}
                                 onChange={(e) => setTempStartTime(e.target.value)}
-                                className="time-picker-input w-full p-3 bg-gray-50 rounded-xl text-sm font-bold text-gray-800 border border-gray-100 focus:border-blue-500 outline-none relative"
+                                className="time-picker-input w-full p-3 bg-brand-black rounded-xl text-sm font-bold text-white border border-white/10 focus:border-brand-gold outline-none relative"
                               />
                             </div>
                             <div>
-                              <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest block mb-1.5">Ish tugatish</label>
+                              <label className="text-[10px] font-black text-white/30 uppercase tracking-widest block mb-1.5">Ish tugatish</label>
                               <input 
                                 type="time" 
                                 value={tempEndTime}
                                 onClick={(e) => { try { (e.currentTarget as any).showPicker(); } catch (err) {} }}
                                 onChange={(e) => setTempEndTime(e.target.value)}
-                                className="time-picker-input w-full p-3 bg-gray-50 rounded-xl text-sm font-bold text-gray-800 border border-gray-100 focus:border-blue-500 outline-none relative"
+                                className="time-picker-input w-full p-3 bg-brand-black rounded-xl text-sm font-bold text-white border border-white/10 focus:border-brand-gold outline-none relative"
                               />
                             </div>
                             <button
@@ -887,7 +946,7 @@ const ManagerPanel: React.FC<ManagerPanelProps> = ({ state, approveUser, updateU
                                   alert('Iltimos, vaqtlarni to\'liq kiriting');
                                 }
                               }}
-                              className="w-full py-3 bg-blue-600 text-white rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-blue-700 transition shadow-md shadow-blue-200"
+                              className="w-full py-3 gold-gradient text-brand-black rounded-xl text-[10px] font-black uppercase tracking-widest hover:scale-[1.02] transition shadow-md shadow-brand-gold/20"
                             >
                               Saqlash
                             </button>
@@ -901,44 +960,44 @@ const ManagerPanel: React.FC<ManagerPanelProps> = ({ state, approveUser, updateU
                         setIsSendMessageModalOpen(true);
                         setMessageText('');
                       }}
-                      className="p-3 bg-blue-50 text-blue-600 rounded-2xl hover:bg-blue-600 hover:text-white transition-all shadow-sm flex items-center gap-2 text-[10px] font-black uppercase tracking-widest"
+                      className="p-3 bg-brand-gold/10 text-brand-gold rounded-2xl hover:bg-brand-gold hover:text-brand-black transition-all shadow-sm flex items-center gap-2 text-[10px] font-black uppercase tracking-widest border border-brand-gold/20"
                     >
                       <Phone className="w-4 h-4" />
                       Xabar yuborish
                     </button>
-                    <button onClick={() => { setSelectedUserId(null); setSelectedDay(null); }} className="p-3 bg-red-50 text-red-500 rounded-full hover:bg-red-500 hover:text-white transition-all shadow-sm"><X className="w-6 h-6" /></button>
+                    <button onClick={() => { setSelectedUserId(null); setSelectedDay(null); }} className="p-3 bg-red-500/10 text-red-500 rounded-full hover:bg-red-500 hover:text-white transition-all shadow-sm border border-red-500/20"><X className="w-6 h-6" /></button>
                   </div>
                 </div>
 
-                <div className="flex-1 overflow-y-auto p-4 md:p-8 space-y-8 custom-scrollbar bg-gray-50/50">
+                <div className="flex-1 overflow-y-auto p-4 md:p-8 space-y-8 custom-scrollbar bg-brand-black">
                   <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
                     <RefinedStatCard 
-                      label="Bugungi Sotuv" 
+                      label={t(language, 'today_sales')} 
                       value={getUserSalesCount(selectedUser.id, 'today')} 
                       icon={<Clock />} 
-                      color="bg-blue-600" 
+                      color="bg-brand-gold" 
                       isActive={chartTimeframe === 'week'}
                       onClick={() => setChartTimeframe('week')}
                     />
                     <RefinedStatCard 
-                      label="Shu Oylik" 
+                      label={t(language, 'this_month')} 
                       value={getUserSalesCount(selectedUser.id, 'month')} 
                       icon={<CalendarDays />} 
-                      color="bg-indigo-600" 
+                      color="bg-white/10" 
                       isActive={chartTimeframe === 'month'}
                       onClick={() => setChartTimeframe('month')}
                     />
                     <RefinedStatCard 
-                      label="Telefon" 
+                      label={t(language, 'phone')} 
                       value={selectedUser.phone} 
                       icon={<Phone />} 
-                      color="bg-violet-600" 
+                      color="bg-brand-gold" 
                     />
                     <RefinedStatCard 
-                      label="Jami" 
+                      label={t(language, 'total')} 
                       value={getUserSalesCount(selectedUser.id, 'total')} 
                       icon={<Award />} 
-                      color="bg-emerald-600" 
+                      color="bg-white/10" 
                       isActive={chartTimeframe === 'year'}
                       onClick={() => setChartTimeframe('year')}
                     />
@@ -946,22 +1005,22 @@ const ManagerPanel: React.FC<ManagerPanelProps> = ({ state, approveUser, updateU
 
                   <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
                     <div className="lg:col-span-2 space-y-8">
-                      <div className="bg-white rounded-[2rem] p-6 shadow-sm overflow-hidden border-none outline-none select-none no-outline-container">
+                      <div className="bg-brand-dark rounded-[2rem] p-6 shadow-sm overflow-hidden border border-white/10 outline-none select-none no-outline-container">
                         <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-8 gap-4">
                           <div className="flex items-center gap-3">
                             <div className="flex flex-col gap-1">
-                              <h3 className="text-lg font-black text-gray-800 flex items-center gap-2">
-                                <BarChart2 className="w-5 h-5 text-blue-600" /> 
+                              <h3 className="text-lg font-black text-white flex items-center gap-2">
+                                <BarChart2 className="w-5 h-5 text-brand-gold" /> 
                                 Sotuvlar Dinamikasi ({chartTitleLabel})
                               </h3>
                               <div className="flex flex-wrap gap-2 pl-7">
-                                {['Ucell', 'Mobiuz', 'Beeline', 'Uztelecom'].map(company => {
+                                {['Ucell', 'Uztelecom', 'Mobiuz', 'Beeline'].map(company => {
                                   const count = periodTotals[company] || 0;
                                   const styles: any = {
-                                    'Ucell': 'text-purple-600 bg-purple-50 border-purple-100',
-                                    'Mobiuz': 'text-red-600 bg-red-50 border-red-100',
-                                    'Beeline': 'text-yellow-600 bg-yellow-50 border-yellow-100',
-                                    'Uztelecom': 'text-blue-600 bg-blue-50 border-blue-100'
+                                    'Ucell': 'text-[#9b51e0] bg-[#9b51e0]/10 border-[#9b51e0]/20',
+                                    'Uztelecom': 'text-[#009ee0] bg-[#009ee0]/10 border-[#009ee0]/20',
+                                    'Mobiuz': 'text-[#eb1c24] bg-[#eb1c24]/10 border-[#eb1c24]/20',
+                                    'Beeline': 'text-[#fdb913] bg-[#fdb913]/10 border-[#fdb913]/20'
                                   }[company];
                                   return (
                                     <span key={company} className={`text-[9px] font-black uppercase tracking-widest px-2 py-1 rounded-lg border ${styles}`}>
@@ -971,18 +1030,18 @@ const ManagerPanel: React.FC<ManagerPanelProps> = ({ state, approveUser, updateU
                                 })}
                               </div>
                             </div>
-                            <div className="flex items-center gap-1 bg-gray-50 p-1 rounded-xl border border-gray-100 shadow-inner">
+                            <div className="flex items-center gap-1 bg-brand-black p-1 rounded-xl border border-white/10 shadow-inner">
                               <button 
                                 onClick={() => {
                                   if (chartTimeframe === 'week') setWeekOffset(prev => prev - 1);
                                   else if (chartTimeframe === 'month') setMonthOffset(prev => prev - 1);
                                   else if (chartTimeframe === 'year') setSelectedYear(prev => prev - 1);
                                 }}
-                                className="p-1.5 hover:bg-white hover:shadow-sm rounded-lg transition-all text-gray-400 hover:text-blue-600 focus:outline-none"
+                                className="p-1.5 hover:bg-white/5 hover:shadow-sm rounded-lg transition-all text-white/30 hover:text-brand-gold focus:outline-none"
                               >
                                 <ChevronLeft className="w-4 h-4" />
                               </button>
-                              <span className="text-[10px] font-black text-blue-600 px-2 uppercase tracking-tighter whitespace-nowrap min-w-[120px] text-center">
+                              <span className="text-[10px] font-black text-brand-gold px-2 uppercase tracking-tighter whitespace-nowrap min-w-[120px] text-center">
                                 {chartTimeframe === 'week' ? (
                                   currentChartData.length === 7 ? (() => {
                                     const s = new Date(currentChartData[0].fullDate);
@@ -1002,7 +1061,7 @@ const ManagerPanel: React.FC<ManagerPanelProps> = ({ state, approveUser, updateU
                                   else if (chartTimeframe === 'month') setMonthOffset(prev => prev + 1);
                                   else if (chartTimeframe === 'year') setSelectedYear(prev => prev + 1);
                                 }}
-                                className="p-1.5 hover:bg-white hover:shadow-sm rounded-lg transition-all text-gray-400 hover:text-blue-600 focus:outline-none"
+                                className="p-1.5 hover:bg-white/5 hover:shadow-sm rounded-lg transition-all text-white/30 hover:text-brand-gold focus:outline-none"
                               >
                                 <ChevronRight className="w-4 h-4" />
                               </button>
@@ -1012,14 +1071,14 @@ const ManagerPanel: React.FC<ManagerPanelProps> = ({ state, approveUser, updateU
                             {(selectedDay || weekOffset !== 0 || monthOffset !== 0 || (chartTimeframe === 'year' && selectedYear !== new Date().getFullYear())) && (
                               <button 
                                 onClick={handleResetChart}
-                                className="px-4 py-2 bg-blue-50 text-blue-600 rounded-xl text-[10px] font-black uppercase tracking-widest flex items-center gap-2 hover:bg-blue-100 transition shadow-sm focus:outline-none"
+                                className="px-4 py-2 bg-brand-gold/10 text-brand-gold rounded-xl text-[10px] font-black uppercase tracking-widest flex items-center gap-2 hover:bg-brand-gold/20 transition shadow-sm focus:outline-none border border-brand-gold/20"
                               >
-                                <RotateCcw className="w-3.5 h-3.5" /> Bugunga qaytish
+                                <RotateCcw className="w-3.5 h-3.5" /> {t(language, 'back_to_today')}
                               </button>
                             )}
                           </div>
                         </div>
-                        <div className="h-64 border-none outline-none bg-white focus:outline-none focus:ring-0 chart-wrapper">
+                        <div className="h-64 border-none outline-none bg-brand-dark focus:outline-none focus:ring-0 chart-wrapper">
                           <ResponsiveContainer width="100%" height="100%" style={{ border: 'none', outline: 'none' }}>
                             <BarChart 
                               data={currentChartData} 
@@ -1039,25 +1098,25 @@ const ManagerPanel: React.FC<ManagerPanelProps> = ({ state, approveUser, updateU
                               margin={{ top: 10, right: 10, left: 0, bottom: 0 }}
                               style={{ border: 'none', outline: 'none' }}
                             >
-                              <CartesianGrid strokeDasharray="4 4" vertical={false} stroke="#f1f5f9" />
+                              <CartesianGrid strokeDasharray="4 4" vertical={false} stroke="rgba(255,255,255,0.05)" />
                               <XAxis 
                                 dataKey="name" 
                                 axisLine={false} 
                                 tickLine={false} 
-                                tick={{fontSize: 11, fill: '#94a3b8', fontWeight: 700}} 
+                                tick={{fontSize: 11, fill: 'rgba(255,255,255,0.3)', fontWeight: 700}} 
                                 interval={0}
                               />
                               <YAxis hide axisLine={false} tickLine={false} />
                               <Tooltip 
-                                contentStyle={{borderRadius: '16px', border: 'none', boxShadow: '0 25px 50px -12px rgb(0 0 0 / 0.15)', outline: 'none'}} 
-                                cursor={{ fill: '#f1f5f9', radius: 4 }} 
+                                contentStyle={{borderRadius: '16px', border: 'none', boxShadow: '0 25px 50px -12px rgb(0 0 0 / 0.15)', outline: 'none', backgroundColor: '#1A1A1A', color: '#FFFFFF'}} 
+                                cursor={{ fill: 'rgba(255,255,255,0.05)', radius: 4 }} 
                               />
                               {activeReferencePoint && (
-                                <ReferenceLine x={activeReferencePoint.name} stroke="#2563eb" strokeWidth={2} strokeDasharray="3 3" />
+                                <ReferenceLine x={activeReferencePoint.name} stroke="var(--theme-gold)" strokeWidth={2} strokeDasharray="3 3" />
                               )}
                               <Bar 
                                 dataKey="sales" 
-                                fill="#2563eb" 
+                                fill="var(--theme-gold)" 
                                 radius={[12, 12, 0, 0]}
                                 barSize={80}
                               />
@@ -1066,12 +1125,12 @@ const ManagerPanel: React.FC<ManagerPanelProps> = ({ state, approveUser, updateU
                         </div>
                       </div>
 
-                      <div className="bg-white rounded-[2rem] border border-gray-100 overflow-hidden shadow-sm">
-                        <div className="p-6 border-b border-gray-50 relative flex flex-col md:flex-row items-center justify-between bg-white gap-4">
+                      <div className="bg-brand-dark rounded-[2rem] border border-white/10 overflow-hidden shadow-sm">
+                        <div className="p-6 border-b border-white/5 relative flex flex-col md:flex-row items-center justify-between bg-brand-dark gap-4">
                           <div className="flex items-center gap-3 w-full md:w-auto">
-                            <div className="p-2.5 bg-indigo-50 rounded-xl text-indigo-600"><Smartphone className="w-5 h-5" /></div>
-                            <h3 className="text-lg font-black text-gray-800 tracking-tight">
-                              {selectedDay ? (chartTimeframe === 'year' ? `${new Date(selectedDay).toLocaleDateString('uz-UZ', { month: 'long', year: 'numeric' })} Oylik Sotuvlar` : `${selectedDay} Kunlik Sotuvlar`) : (chartTimeframe === 'month' ? `${chartTitleLabel} Oylik Sotuvlar` : `${today} Kunlik Sotuvlar`)}
+                            <div className="p-2.5 bg-brand-gold/10 rounded-xl text-brand-gold"><Smartphone className="w-5 h-5" /></div>
+                            <h3 className="text-lg font-black text-white tracking-tight">
+                              {selectedDay ? (chartTimeframe === 'year' ? `${new Date(selectedDay).toLocaleDateString(language === 'uz' ? 'uz-UZ' : language === 'ru' ? 'ru-RU' : 'en-US', { month: 'long', year: 'numeric' })} ${t(language, 'monthly_sales_title')}` : `${selectedDay} ${t(language, 'daily_sales_title')}`) : (chartTimeframe === 'month' ? `${chartTitleLabel} ${t(language, 'monthly_sales_title')}` : `${today} ${t(language, 'daily_sales_title')}`)}
                             </h3>
                           </div>
                           
@@ -1097,16 +1156,16 @@ const ManagerPanel: React.FC<ManagerPanelProps> = ({ state, approveUser, updateU
                               }
 
                               const companies = [
-                                { name: 'Ucell', color: 'border-purple-500 text-purple-600' },
-                                { name: 'Mobiuz', color: 'border-red-500 text-red-600' },
-                                { name: 'Beeline', color: 'border-yellow-500 text-yellow-600' },
-                                { name: 'Uztelecom', color: 'border-blue-500 text-blue-600' }
+                                { name: 'Ucell', color: 'border-[#9b51e0]/20 text-[#9b51e0] bg-[#9b51e0]/10' },
+                                { name: 'Uztelecom', color: 'border-[#009ee0]/20 text-[#009ee0] bg-[#009ee0]/10' },
+                                { name: 'Mobiuz', color: 'border-[#eb1c24]/20 text-[#eb1c24] bg-[#eb1c24]/10' },
+                                { name: 'Beeline', color: 'border-[#fdb913]/20 text-[#fdb913] bg-[#fdb913]/10' }
                               ];
                               
                               return companies.map(c => {
                                 const count = daySales.filter(s => s.company === c.name).reduce((acc, s) => acc + s.count + s.bonus, 0);
                                 return (
-                                  <div key={c.name} className={`px-3 py-1.5 rounded-lg border-2 ${c.color} bg-white font-bold text-xs flex items-center gap-2`}>
+                                  <div key={c.name} className={`px-3 py-1.5 rounded-lg border ${c.color} font-bold text-xs flex items-center gap-2`}>
                                     <span className="uppercase text-[10px] opacity-70">{c.name}:</span>
                                     <span className="text-sm">{count}</span>
                                   </div>
@@ -1117,7 +1176,7 @@ const ManagerPanel: React.FC<ManagerPanelProps> = ({ state, approveUser, updateU
 
                           <div className="w-full md:w-auto flex justify-end">
                             {selectedDay && (
-                              <div className="flex items-center gap-2 text-[9px] font-black text-blue-600 bg-blue-50 px-3 py-1 rounded-full uppercase tracking-widest shadow-sm">
+                              <div className="flex items-center gap-2 text-[9px] font-black text-brand-gold bg-brand-gold/10 px-3 py-1 rounded-full uppercase tracking-widest shadow-sm border border-brand-gold/20">
                                 <Calendar className="w-3 h-3" /> Tanlangan kun
                               </div>
                             )}
@@ -1125,17 +1184,17 @@ const ManagerPanel: React.FC<ManagerPanelProps> = ({ state, approveUser, updateU
                         </div>
                         <div className="overflow-x-auto">
                           <table className="w-full text-left">
-                            <thead className="bg-gray-50 text-[9px] font-black text-gray-400 uppercase tracking-widest">
+                            <thead className="bg-brand-black text-[9px] font-black text-white/30 uppercase tracking-widest">
                               <tr>
                                 <th className="px-8 py-4">Kompaniya</th>
                                 <th className="px-8 py-4">Tarif</th>
                                 <th className="px-8 py-4 text-center">Soni</th>
                                 <th className="px-8 py-4 text-center">Bonus</th>
-                                <th className="px-8 py-4 text-center">Jami</th>
+                                <th className="px-8 py-4 text-center">{t(language, 'total')}</th>
                                 <th className="px-8 py-4 text-right">Vaqt</th>
                               </tr>
                             </thead>
-                            <tbody className="divide-y divide-gray-50">
+                            <tbody className="divide-y divide-white/5">
                               {(() => {
                                 let daySales = [];
                                 if (selectedDay) {
@@ -1160,28 +1219,39 @@ const ManagerPanel: React.FC<ManagerPanelProps> = ({ state, approveUser, updateU
                                     <tr>
                                       <td colSpan={6} className="px-8 py-20 text-center">
                                         <div className="flex flex-col items-center gap-4">
-                                          <div className="w-16 h-16 bg-gray-50 rounded-full flex items-center justify-center text-gray-300">
+                                          <div className="w-16 h-16 bg-white/5 rounded-full flex items-center justify-center text-white/10">
                                             <PackageSearch className="w-10 h-10" />
                                           </div>
-                                          <p className="text-sm font-black text-gray-400 italic">Bu davrda hech nima sotilmagan</p>
+                                          <p className="text-sm font-black text-white/20 italic">Bu davrda hech nima sotilmagan</p>
                                         </div>
                                       </td>
                                     </tr>
                                   );
                                 }
-                                return daySales.map(sale => (
-                                  <tr key={sale.id} className="hover:bg-indigo-50/20 transition group">
+                                return daySales.sort((a, b) => {
+                                  const order = { 'Ucell': 1, 'Uztelecom': 2, 'Mobiuz': 3, 'Beeline': 4 };
+                                  return (order[a.company as keyof typeof order] || 99) - (order[b.company as keyof typeof order] || 99) || b.timestamp.localeCompare(a.timestamp);
+                                }).map(sale => (
+                                  <tr key={sale.id} className="hover:bg-white/5 transition group">
                                     <td className="px-8 py-5">
-                                      <span className="px-3 py-1 bg-indigo-50 text-indigo-600 rounded-lg text-[10px] font-black uppercase group-hover:bg-indigo-600 group-hover:text-white transition-colors">{sale.company}</span>
+                                      <span className={`px-3 py-1 rounded-lg text-[10px] font-black uppercase transition-colors border ${
+                                        sale.company === 'Ucell' ? 'bg-[#9b51e0]/10 text-[#9b51e0] border-[#9b51e0]/20 group-hover:bg-[#9b51e0] group-hover:text-white' :
+                                        sale.company === 'Uztelecom' ? 'bg-[#009ee0]/10 text-[#009ee0] border-[#009ee0]/20 group-hover:bg-[#009ee0] group-hover:text-white' :
+                                        sale.company === 'Mobiuz' ? 'bg-[#eb1c24]/10 text-[#eb1c24] border-[#eb1c24]/20 group-hover:bg-[#eb1c24] group-hover:text-white' :
+                                        sale.company === 'Beeline' ? 'bg-[#fdb913]/10 text-[#fdb913] border-[#fdb913]/20 group-hover:bg-[#fdb913] group-hover:text-black' :
+                                        'bg-brand-gold/10 text-brand-gold border-brand-gold/20 group-hover:bg-brand-gold group-hover:text-brand-black'
+                                      }`}>
+                                        {sale.company}
+                                      </span>
                                     </td>
-                                    <td className="px-8 py-5 text-sm font-bold text-gray-700">{sale.tariff}</td>
-                                    <td className="px-8 py-5 text-center font-black text-lg text-indigo-600">{sale.count}</td>
-                                    <td className="px-8 py-5 text-center font-black text-lg text-gray-700">{sale.bonus.toLocaleString()}</td>
-                                    <td className="px-8 py-5 text-center font-black text-lg text-indigo-600">{(sale.count + sale.bonus).toLocaleString()}</td>
-                                    <td className="px-8 py-5 text-right text-[10px] font-bold text-gray-300">
+                                    <td className="px-8 py-5 text-sm font-bold text-white/70">{sale.tariff}</td>
+                                    <td className="px-8 py-5 text-center font-black text-lg text-brand-gold">{sale.count}</td>
+                                    <td className="px-8 py-5 text-center font-black text-lg text-white/70">{sale.bonus.toLocaleString()}</td>
+                                    <td className="px-8 py-5 text-center font-black text-lg text-brand-gold">{(sale.count + sale.bonus).toLocaleString()}</td>
+                                    <td className="px-8 py-5 text-right text-[10px] font-bold text-white/20">
                                       <div className="flex flex-col items-end">
                                         <span>{new Date(sale.timestamp).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}</span>
-                                        <span className="text-[8px] text-gray-200">{new Date(sale.timestamp).toLocaleDateString()}</span>
+                                        <span className="text-[8px] text-white/10">{new Date(sale.timestamp).toLocaleDateString()}</span>
                                       </div>
                                     </td>
                                   </tr>
@@ -1193,12 +1263,12 @@ const ManagerPanel: React.FC<ManagerPanelProps> = ({ state, approveUser, updateU
                       </div>
 
                       {/* OPTIMIZED DAILY REPORT DISPLAY MATCHING SCREENSHOT */}
-                      <div className="bg-white rounded-[2rem] border border-gray-100 overflow-hidden shadow-sm">
-                        <div className="p-6 border-b border-gray-50 bg-white">
+                      <div className="bg-brand-dark rounded-[2rem] border border-white/10 overflow-hidden shadow-sm">
+                        <div className="p-6 border-b border-white/5 bg-brand-dark">
                           <div className="flex items-center gap-3">
-                            <div className="p-2.5 bg-blue-50 rounded-xl text-blue-600"><FileText className="w-5 h-5" /></div>
-                            <h3 className="text-lg font-black text-gray-800 tracking-tight">
-                              Kunlik Hisobot {selectedDay ? `(${selectedDay})` : '(Bugun)'}
+                            <div className="p-2.5 bg-brand-gold/10 rounded-xl text-brand-gold"><FileText className="w-5 h-5" /></div>
+                            <h3 className="text-lg font-black text-white tracking-tight">
+                              {t(language, 'daily_report')} {selectedDay ? `(${selectedDay})` : `(${t(language, 'today')})`}
                             </h3>
                           </div>
                         </div>
@@ -1210,10 +1280,10 @@ const ManagerPanel: React.FC<ManagerPanelProps> = ({ state, approveUser, updateU
                             if (!dailyReport) {
                               return (
                                 <div className="flex flex-col items-center py-10 text-center gap-4">
-                                  <div className="w-14 h-14 bg-gray-50 rounded-full flex items-center justify-center text-gray-300">
+                                  <div className="w-14 h-14 bg-white/5 rounded-full flex items-center justify-center text-white/10">
                                     <AlertTriangle className="w-8 h-8" />
                                   </div>
-                                  <p className="text-sm font-black text-gray-400 italic">Bu kun uchun hisobot yuborilmagan</p>
+                                  <p className="text-sm font-black text-white/20 italic">Bu kun uchun hisobot yuborilmagan</p>
                                 </div>
                               );
                             }
@@ -1223,19 +1293,19 @@ const ManagerPanel: React.FC<ManagerPanelProps> = ({ state, approveUser, updateU
                                 {dailyReport.photos && dailyReport.photos.length > 0 && (
                                   <div className="space-y-5">
                                     <div className="flex items-center gap-3 px-2">
-                                      <div className="w-7 h-7 bg-indigo-50 rounded-lg flex items-center justify-center">
-                                        <LayoutGrid className="w-4 h-4 text-indigo-500" />
+                                      <div className="w-7 h-7 bg-brand-gold/10 rounded-lg flex items-center justify-center">
+                                        <LayoutGrid className="w-4 h-4 text-brand-gold" />
                                       </div>
-                                      <p className="text-[10px] font-black text-gray-400 uppercase tracking-[0.15em]">ILOVA QILINGAN RASMLAR ({dailyReport.photos.length})</p>
+                                      <p className="text-[10px] font-black text-white/30 uppercase tracking-[0.15em]">ILOVA QILINGAN RASMLAR ({dailyReport.photos.length})</p>
                                     </div>
                                     <div className="grid grid-cols-2 md:grid-cols-3 gap-6">
                                       {dailyReport.photos.map((photo, idx) => (
                                         <div 
                                           key={idx}
-                                          className="relative group cursor-pointer overflow-hidden rounded-[2.2rem] border-4 border-white shadow-xl aspect-square transition-all hover:scale-[1.02]"
+                                          className="relative group cursor-pointer overflow-hidden rounded-[2.2rem] border-4 border-white/10 shadow-xl aspect-square transition-all hover:scale-[1.02]"
                                           onClick={() => setViewingPhoto(photo)}
                                         >
-                                          <img src={photo} className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110" />
+                                          <img src={photo} className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110" referrerPolicy="no-referrer" />
                                           <div className="absolute inset-0 bg-black/30 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
                                             <div className="bg-white/20 backdrop-blur-md p-3 rounded-full border border-white/30 text-white scale-75 group-hover:scale-100 transition-all">
                                               <Maximize2 className="w-6 h-6" />
@@ -1247,17 +1317,17 @@ const ManagerPanel: React.FC<ManagerPanelProps> = ({ state, approveUser, updateU
                                   </div>
                                 )}
 
-                                <div className="bg-white rounded-[2rem] border border-gray-100 p-8 shadow-sm flex flex-col gap-6">
+                                <div className="bg-brand-black rounded-[2rem] border border-white/10 p-8 shadow-sm flex flex-col gap-6">
                                   <div className="flex items-center justify-between">
                                     <div className="flex items-center gap-2">
-                                      <div className="w-2 h-2 rounded-full bg-blue-600"></div>
-                                      <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Kunlik Xulosa</span>
+                                      <div className="w-2 h-2 rounded-full bg-brand-gold"></div>
+                                      <span className="text-[10px] font-black text-white/30 uppercase tracking-widest">Kunlik Xulosa</span>
                                     </div>
-                                    <span className="text-[10px] font-black text-blue-600 bg-blue-50 px-3 py-1 rounded-full">
+                                    <span className="text-[10px] font-black text-brand-gold bg-brand-gold/10 px-3 py-1 rounded-full border border-brand-gold/20">
                                       {new Date(dailyReport.timestamp).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit', hour12: true})}
                                     </span>
                                   </div>
-                                  <p className="text-gray-800 font-bold text-2xl leading-relaxed tracking-tight">
+                                  <p className="text-white font-bold text-2xl leading-relaxed tracking-tight">
                                     {dailyReport.summary}
                                   </p>
                                 </div>
@@ -1269,14 +1339,14 @@ const ManagerPanel: React.FC<ManagerPanelProps> = ({ state, approveUser, updateU
                     </div>
 
                     <div className="space-y-8">
-                      <div className="bg-white rounded-[2rem] border border-gray-100 overflow-hidden shadow-sm focus:outline-none">
-                        <h3 className="p-5 text-[10px] font-black text-gray-400 uppercase tracking-widest border-b border-gray-50 flex items-center justify-between">
-                          <div className="flex items-center gap-2"><Clock className="w-4 h-4 text-blue-500" /> {selectedDay || today} DAVOMAT</div>
+                      <div className="bg-brand-dark rounded-[2rem] border border-white/10 overflow-hidden shadow-sm focus:outline-none">
+                        <h3 className="p-5 text-[10px] font-black text-white/30 uppercase tracking-widest border-b border-white/5 flex items-center justify-between">
+                          <div className="flex items-center gap-2"><Clock className="w-4 h-4 text-brand-gold" /> {selectedDay || today} DAVOMAT</div>
                           {(() => {
                              const date = selectedDay || today;
                              const ci = state.checkIns.find(c => c.userId === selectedUser.id && isDateMatch(c.timestamp, date));
                              const workingHours = ci?.workingHours || selectedUser.workingHours;
-                             return workingHours ? <span className="bg-gray-100 px-2 py-1 rounded-md text-gray-600">{workingHours}</span> : null;
+                             return workingHours ? <span className="bg-brand-black px-2 py-1 rounded-md text-white/50 border border-white/10">{workingHours}</span> : null;
                           })()}
                         </h3>
                         <div className="p-6 space-y-4">
@@ -1289,12 +1359,12 @@ const ManagerPanel: React.FC<ManagerPanelProps> = ({ state, approveUser, updateU
                             const earlyDeparture = co ? getEarlyDepartureStatus(co.timestamp, workingHours) : null;
                             
                             const arrivalCardStyle = ci 
-                              ? (lateness ? 'bg-red-50 border-red-300 shadow-red-100/50' : 'bg-green-50 border-green-100 shadow-green-100/50') 
-                              : 'bg-red-50/50 border-red-100';
+                              ? (lateness ? 'bg-red-500/10 border-red-500/30' : 'bg-green-500/10 border-green-500/20') 
+                              : 'bg-red-500/5 border-red-500/10';
 
                             const departureCardStyle = co
-                              ? (earlyDeparture ? 'bg-orange-50 border-orange-300 shadow-orange-100/50' : 'bg-blue-50 border-blue-100 shadow-blue-100/50')
-                              : 'bg-gray-50 border-gray-100 opacity-60';
+                              ? (earlyDeparture ? 'bg-orange-500/10 border-orange-500/30' : 'bg-blue-500/10 border-blue-500/20')
+                              : 'bg-white/5 border-white/10 opacity-60';
                             
                             return (
                               <>
@@ -1303,20 +1373,8 @@ const ManagerPanel: React.FC<ManagerPanelProps> = ({ state, approveUser, updateU
                                     <div className={`p-3 rounded-2xl shadow-md ${ci ? (lateness ? 'bg-red-600 text-white' : 'bg-green-600 text-white') : 'bg-red-600 text-white'}`}><LogInIcon className="w-5 h-5" /></div>
                                     <div className="flex-1">
                                       <div className="flex justify-between items-start">
-                                        <p className="text-[9px] font-black text-gray-400 uppercase tracking-widest">Kelish</p>
+                                        <p className="text-[9px] font-black text-white/30 uppercase tracking-widest">Kelish</p>
                                         <div className="flex items-center gap-2">
-                                          {ci && editingTime?.type !== 'checkIn' && (
-                                            <button 
-                                              onClick={() => {
-                                                const time = new Date(ci.timestamp).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit', hour12: false});
-                                                setEditingTime({ type: 'checkIn', current: time });
-                                                setNewTime(time);
-                                              }}
-                                              className="p-1.5 bg-white/50 rounded-lg hover:bg-white transition shadow-sm"
-                                            >
-                                              <Edit className="w-3.5 h-3.5 text-gray-500" />
-                                            </button>
-                                          )}
                                           {lateness && (
                                             <div className="bg-red-600 text-white text-[8px] font-black px-2 py-0.5 rounded-full uppercase animate-pulse shadow-md ring-2 ring-white">LATE</div>
                                           )}
@@ -1328,7 +1386,7 @@ const ManagerPanel: React.FC<ManagerPanelProps> = ({ state, approveUser, updateU
                                             type="time" 
                                             value={newTime} 
                                             onChange={e => setNewTime(e.target.value)}
-                                            className="bg-white border border-gray-200 rounded-lg px-2 py-1 text-lg font-bold w-32 outline-none focus:ring-2 focus:ring-blue-500"
+                                            className="bg-brand-black border border-white/10 rounded-lg px-2 py-1 text-lg font-bold w-32 outline-none focus:border-brand-gold text-white"
                                             autoFocus
                                           />
                                           <button 
@@ -1345,15 +1403,15 @@ const ManagerPanel: React.FC<ManagerPanelProps> = ({ state, approveUser, updateU
                                           >
                                             <Check className="w-4 h-4" />
                                           </button>
-                                          <button onClick={() => setEditingTime(null)} className="p-2 bg-gray-200 text-gray-600 rounded-lg hover:bg-gray-300 transition shadow-sm"><X className="w-4 h-4" /></button>
+                                          <button onClick={() => setEditingTime(null)} className="p-2 bg-white/10 text-white rounded-lg hover:bg-white/20 transition shadow-sm border border-white/10"><X className="w-4 h-4" /></button>
                                         </div>
                                       ) : (
-                                        <p className={`text-2xl font-black leading-none mt-1 ${ci ? (lateness ? 'text-red-900' : 'text-gray-800') : 'text-red-900/40'}`}>
-                                          {ci ? new Date(ci.timestamp).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit', hour12: true}).toUpperCase() : 'Kelmagan'}
+                                        <p className={`text-2xl font-black leading-none mt-1 ${ci ? (lateness ? 'text-red-500' : 'text-white') : 'text-red-500/40'}`}>
+                                          {ci ? new Date(ci.timestamp).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit', hour12: true}).toUpperCase() : t(language, 'not_come')}
                                         </p>
                                       )}
                                       {lateness && editingTime?.type !== 'checkIn' && (
-                                        <div className="mt-2 pt-2 border-t border-red-200 flex items-center gap-1.5 text-red-600 font-black text-[10px] uppercase tracking-wider animate-in fade-in slide-in-from-top-2 duration-500">
+                                        <div className="mt-2 pt-2 border-t border-red-500/20 flex items-center gap-1.5 text-red-500 font-black text-[10px] uppercase tracking-wider animate-in fade-in slide-in-from-top-2 duration-500">
                                           <AlertTriangle className="w-3.5 h-3.5" />
                                           <span>{lateness.durationStr} kechikish</span>
                                         </div>
@@ -1363,23 +1421,11 @@ const ManagerPanel: React.FC<ManagerPanelProps> = ({ state, approveUser, updateU
                                 </div>
                                 <div className={`p-6 rounded-[2rem] border-2 flex flex-col gap-2 shadow-sm transition-all ${departureCardStyle}`}>
                                   <div className="flex items-center gap-4">
-                                    <div className={`p-3 rounded-2xl shadow-md ${co ? (earlyDeparture ? 'bg-orange-500 text-white' : 'bg-blue-600 text-white') : 'bg-gray-400 text-white'}`}><LogOutIcon className="w-5 h-5" /></div>
+                                    <div className={`p-3 rounded-2xl shadow-md ${co ? (earlyDeparture ? 'bg-orange-500 text-white' : 'bg-blue-500 text-white') : 'bg-white/10 text-white/30'}`}><LogOutIcon className="w-5 h-5" /></div>
                                     <div className="flex-1">
                                       <div className="flex justify-between items-start">
-                                        <p className="text-[9px] font-black text-gray-400 uppercase tracking-widest">Ketish</p>
+                                        <p className="text-[9px] font-black text-white/30 uppercase tracking-widest">Ketish</p>
                                         <div className="flex items-center gap-2">
-                                          {co && editingTime?.type !== 'checkOut' && (
-                                            <button 
-                                              onClick={() => {
-                                                const time = new Date(co.timestamp).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit', hour12: false});
-                                                setEditingTime({ type: 'checkOut', current: time });
-                                                setNewTime(time);
-                                              }}
-                                              className="p-1.5 bg-white/50 rounded-lg hover:bg-white transition shadow-sm"
-                                            >
-                                              <Edit className="w-3.5 h-3.5 text-gray-500" />
-                                            </button>
-                                          )}
                                           {earlyDeparture && (
                                             <div className="bg-orange-500 text-white text-[8px] font-black px-2 py-0.5 rounded-full uppercase animate-pulse shadow-md ring-2 ring-white">EARLY</div>
                                           )}
@@ -1391,7 +1437,7 @@ const ManagerPanel: React.FC<ManagerPanelProps> = ({ state, approveUser, updateU
                                             type="time" 
                                             value={newTime} 
                                             onChange={e => setNewTime(e.target.value)}
-                                            className="bg-white border border-gray-200 rounded-lg px-2 py-1 text-lg font-bold w-32 outline-none focus:ring-2 focus:ring-blue-500"
+                                            className="bg-brand-black border border-white/10 rounded-lg px-2 py-1 text-lg font-bold w-32 outline-none focus:border-brand-gold text-white"
                                             autoFocus
                                           />
                                           <button 
@@ -1408,15 +1454,15 @@ const ManagerPanel: React.FC<ManagerPanelProps> = ({ state, approveUser, updateU
                                           >
                                             <Check className="w-4 h-4" />
                                           </button>
-                                          <button onClick={() => setEditingTime(null)} className="p-2 bg-gray-200 text-gray-600 rounded-lg hover:bg-gray-300 transition shadow-sm"><X className="w-4 h-4" /></button>
+                                          <button onClick={() => setEditingTime(null)} className="p-2 bg-white/10 text-white rounded-lg hover:bg-white/20 transition shadow-sm border border-white/10"><X className="w-4 h-4" /></button>
                                         </div>
                                       ) : (
-                                        <p className={`text-2xl font-black leading-none mt-1 ${co ? (earlyDeparture ? 'text-orange-900' : 'text-gray-800') : 'text-gray-400'}`}>
+                                        <p className={`text-2xl font-black leading-none mt-1 ${co ? (earlyDeparture ? 'text-orange-500' : 'text-white') : 'text-white/20'}`}>
                                           {co ? new Date(co.timestamp).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit', hour12: true}).toUpperCase() : 'Hali ketmagan'}
                                         </p>
                                       )}
                                       {earlyDeparture && editingTime?.type !== 'checkOut' && (
-                                        <div className="mt-2 pt-2 border-t border-orange-200 flex items-center gap-1.5 text-orange-600 font-black text-[10px] uppercase tracking-wider animate-in fade-in slide-in-from-top-2 duration-500">
+                                        <div className="mt-2 pt-2 border-t border-orange-500/20 flex items-center gap-1.5 text-orange-500 font-black text-[10px] uppercase tracking-wider animate-in fade-in slide-in-from-top-2 duration-500">
                                           <AlertTriangle className="w-3.5 h-3.5" />
                                           <span>{earlyDeparture.durationStr} erta ketish</span>
                                         </div>
@@ -1430,9 +1476,9 @@ const ManagerPanel: React.FC<ManagerPanelProps> = ({ state, approveUser, updateU
                         </div>
                       </div>
 
-                      <div className="bg-white rounded-[2rem] border border-gray-100 p-6 shadow-sm">
-                        <h3 className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-4 flex items-center gap-2">
-                          <ImageIcon className="w-4 h-4 text-indigo-500" /> {selectedDay ? 'KUNDAGI FOTO' : 'OXIRGI FOTO'}
+                      <div className="bg-brand-dark rounded-[2rem] border border-white/10 p-6 shadow-sm">
+                        <h3 className="text-[10px] font-black text-white/30 uppercase tracking-widest mb-4 flex items-center gap-2">
+                          <ImageIcon className="w-4 h-4 text-brand-gold" /> {selectedDay ? 'KUNDAGI FOTO' : 'OXIRGI FOTO'}
                         </h3>
                         {(() => {
                           const targetDate = selectedDay || today;
@@ -1442,7 +1488,7 @@ const ManagerPanel: React.FC<ManagerPanelProps> = ({ state, approveUser, updateU
                               className="relative group cursor-pointer overflow-hidden rounded-[1.5rem]"
                               onClick={() => setViewingPhoto(dayCi.photo)}
                             >
-                              <img src={dayCi.photo} className="w-full h-40 object-cover shadow-sm border border-gray-50 group-hover:scale-105 transition-transform duration-500" />
+                              <img src={dayCi.photo} className="w-full h-40 object-cover shadow-sm border border-white/5 group-hover:scale-105 transition-transform duration-500" referrerPolicy="no-referrer" />
                               <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
                                 <div className="bg-white/20 backdrop-blur-md p-3 rounded-full border border-white/30 text-white scale-90 group-hover:scale-100 transition-transform">
                                   <Maximize2 className="w-5 h-5" />
@@ -1450,22 +1496,22 @@ const ManagerPanel: React.FC<ManagerPanelProps> = ({ state, approveUser, updateU
                               </div>
                             </div>
                           ) : (
-                            <div className="h-40 flex items-center justify-center text-gray-300 italic font-black text-xs uppercase tracking-widest bg-gray-50 rounded-[1.5rem] border-2 border-dashed border-gray-100">
+                            <div className="h-40 flex items-center justify-center text-white/20 italic font-black text-xs uppercase tracking-widest bg-brand-black rounded-[1.5rem] border-2 border-dashed border-white/10">
                               {selectedDay ? 'Bu kunda foto yo\'q' : 'Hali foto yo\'q'}
                             </div>
                           );
                         })()}
                       </div>
 
-                      <div className="bg-white rounded-[2rem] border border-gray-100 p-6 shadow-sm">
-                        <h3 className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-4 flex items-center gap-2">
-                          <MapPin className="w-4 h-4 text-blue-500" /> {selectedDay ? 'KUNDAGI JOYLAHUV' : 'OXIRGI JOYLAHUV'}
+                      <div className="bg-brand-dark rounded-[2rem] border border-white/10 p-6 shadow-sm">
+                        <h3 className="text-[10px] font-black text-white/30 uppercase tracking-widest mb-4 flex items-center gap-2">
+                          <MapPin className="w-4 h-4 text-brand-gold" /> {selectedDay ? 'KUNDAGI JOYLAHUV' : 'OXIRGI JOYLAHUV'}
                         </h3>
                         {(() => {
                           const targetDate = selectedDay || today;
                           const dayCi = state.checkIns.find(c => c.userId === selectedUser.id && isDateMatch(c.timestamp, targetDate));
                           const initials = `${selectedUser.firstName?.[0] || ''}${selectedUser.lastName?.[0] || ''}`.toUpperCase();
-                          return <SingleLocationMap location={dayCi?.location || null} initials={initials} />;
+                          return <SingleLocationMap location={dayCi?.location || null} initials={initials} isDarkMode={isDarkMode} language={language} />;
                         })()}
                       </div>
                     </div>
@@ -1478,17 +1524,17 @@ const ManagerPanel: React.FC<ManagerPanelProps> = ({ state, approveUser, updateU
       {activeTab === 'messages' && (
         <div className="space-y-6 animate-in fade-in max-w-4xl mx-auto">
           <div className="flex items-center justify-between">
-            <h2 className="text-2xl font-black text-gray-800">Xabarlar Markazi</h2>
+            <h2 className="text-2xl font-black text-white">{t(language, 'message_center')}</h2>
             <button 
               onClick={() => {
                 setMessageRecipientId('all');
                 setIsSendMessageModalOpen(true);
                 setMessageText('');
               }}
-              className="flex items-center gap-2 bg-blue-600 px-6 py-3 rounded-2xl hover:bg-blue-700 transition-all active:scale-95 shadow-lg shadow-blue-100"
+              className="flex items-center gap-2 bg-brand-gold px-6 py-3 rounded-2xl hover:bg-brand-gold/90 transition-all active:scale-95 shadow-lg shadow-brand-gold/20"
             >
-              <Send className="w-4 h-4 text-white" />
-              <span className="text-[10px] font-black text-white uppercase tracking-widest">Xabar yuborish</span>
+              <Send className="w-4 h-4 text-brand-black" />
+              <span className="text-[10px] font-black text-brand-black uppercase tracking-widest">Xabar yuborish</span>
             </button>
           </div>
 
@@ -1497,36 +1543,36 @@ const ManagerPanel: React.FC<ManagerPanelProps> = ({ state, approveUser, updateU
               state.messages.map(m => (
                 <div 
                   key={m.id} 
-                  className={`p-6 rounded-[2rem] border transition-all relative group ${m.isRead ? 'bg-white border-gray-100' : 'bg-blue-50 border-blue-200 shadow-lg shadow-blue-100/50'}`}
+                  className={`p-6 rounded-[2rem] border transition-all relative group ${m.isRead ? 'bg-brand-dark border-white/10' : 'bg-brand-gold/10 border-brand-gold/30 shadow-lg shadow-brand-gold/5'}`}
                   onClick={() => !m.isRead && markMessageAsRead(m.id)}
                 >
                   <div className="flex justify-between items-start mb-4">
                     <div className="flex items-center gap-3">
-                      <div className={`w-10 h-10 rounded-xl flex items-center justify-center font-black text-xs ${m.senderName.includes('MENEJER') ? 'bg-indigo-600 text-white' : 'bg-blue-100 text-blue-600'}`}>
+                      <div className={`w-10 h-10 rounded-xl flex items-center justify-center font-black text-xs ${m.senderName.includes('MENEJER') ? 'bg-brand-gold text-brand-black' : 'bg-brand-black text-brand-gold border border-brand-gold/20'}`}>
                         {m.senderName[0]}
                       </div>
                       <div>
-                        <h4 className="font-black text-gray-800 text-sm">
+                        <h4 className="font-black text-white text-sm">
                           {m.senderName} 
                           {m.recipientId && (
-                            <span className="text-gray-400 font-medium ml-2">
+                            <span className="text-white/30 font-medium ml-2">
                               → {m.recipientId === 'all' ? 'Barchaga' : (state.users.find(u => u.id === m.recipientId)?.firstName || 'Xodim')}
                             </span>
                           )}
                         </h4>
-                        <p className="text-[10px] text-gray-400 font-bold">{new Date(m.timestamp).toLocaleString()}</p>
+                        <p className="text-[10px] text-white/30 font-bold">{new Date(m.timestamp).toLocaleString()}</p>
                       </div>
                     </div>
-                    {!m.isRead && <span className="px-2 py-1 bg-blue-600 text-white text-[8px] font-black rounded-md uppercase tracking-widest">Yangi</span>}
+                    {!m.isRead && <span className="px-2 py-1 bg-brand-gold text-brand-black text-[8px] font-black rounded-md uppercase tracking-widest">Yangi</span>}
                   </div>
-                  <p className="text-gray-700 font-medium leading-relaxed mb-4 pl-1">{m.text}</p>
+                  <p className="text-white/70 font-medium leading-relaxed mb-4 pl-1">{m.text}</p>
                   
                   {!m.senderName.includes('MENEJER') && (
                     <div className="flex justify-end">
                       {isReplyingTo === m.id ? (
                         <div className="w-full space-y-3 animate-in slide-in-from-top-2">
                           <textarea 
-                            className="w-full p-4 border border-blue-100 rounded-2xl bg-white text-sm focus:ring-2 focus:ring-blue-500 outline-none transition shadow-inner"
+                            className="w-full p-4 border border-white/10 rounded-2xl bg-brand-black text-sm focus:border-brand-gold outline-none transition shadow-inner text-white"
                             rows={3}
                             placeholder="Javobingizni yozing..."
                             value={replyText}
@@ -1542,13 +1588,13 @@ const ManagerPanel: React.FC<ManagerPanelProps> = ({ state, approveUser, updateU
                                 setIsReplyingTo(null);
                                 alert("Javob yuborildi!");
                               }}
-                              className="px-6 py-2.5 bg-blue-600 text-white rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-blue-700 transition shadow-md"
+                              className="px-6 py-2.5 bg-brand-gold text-brand-black rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-brand-gold/90 transition shadow-md"
                             >
                               Yuborish
                             </button>
                             <button 
                               onClick={() => setIsReplyingTo(null)}
-                              className="px-6 py-2.5 bg-gray-100 text-gray-400 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-gray-200 transition"
+                              className="px-6 py-2.5 bg-white/10 text-white rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-white/20 transition border border-white/10"
                             >
                               Bekor qilish
                             </button>
@@ -1560,7 +1606,7 @@ const ManagerPanel: React.FC<ManagerPanelProps> = ({ state, approveUser, updateU
                             e.stopPropagation();
                             setIsReplyingTo(m.id);
                           }}
-                          className="px-6 py-2.5 bg-white border border-gray-200 text-gray-600 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-blue-600 hover:text-white hover:border-blue-600 transition-all shadow-sm"
+                          className="px-6 py-2.5 bg-brand-black border border-brand-gold/20 text-brand-gold rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-brand-gold hover:text-brand-black transition-all shadow-sm"
                         >
                           Javob berish
                         </button>
@@ -1570,12 +1616,12 @@ const ManagerPanel: React.FC<ManagerPanelProps> = ({ state, approveUser, updateU
                 </div>
               ))
             ) : (
-              <div className="bg-white rounded-[3rem] p-20 text-center border border-gray-100 shadow-sm">
-                <div className="w-20 h-20 bg-gray-50 rounded-full flex items-center justify-center mx-auto mb-6 text-gray-200">
+              <div className="bg-brand-dark rounded-[3rem] p-20 text-center border border-white/10 shadow-sm">
+                <div className="w-20 h-20 bg-white/5 rounded-full flex items-center justify-center mx-auto mb-6 text-white/10">
                   <Phone className="w-10 h-10" />
                 </div>
-                <h3 className="text-xl font-black text-gray-800 mb-2">Xabarlar mavjud emas</h3>
-                <p className="text-gray-400 font-medium">Xodimlar tomonidan yuborilgan xabarlar shu yerda ko'rinadi.</p>
+                <h3 className="text-xl font-black text-white mb-2">{t(language, 'no_messages')}</h3>
+                <p className="text-white/30 font-medium">{t(language, 'no_messages_desc')}</p>
               </div>
             )}
           </div>
@@ -1584,23 +1630,23 @@ const ManagerPanel: React.FC<ManagerPanelProps> = ({ state, approveUser, updateU
 
       {activeTab === 'simcards' && (
         <div className="space-y-10 animate-in fade-in slide-in-from-bottom-5 duration-700">
-          <div className="bg-white p-10 rounded-[3rem] shadow-xl border border-gray-100">
+          <div className="bg-brand-dark p-10 rounded-[3rem] shadow-xl border border-white/10">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-10 gap-6">
               <div className="flex items-center gap-4">
-                <h2 className="text-2xl font-black text-gray-800 flex items-center gap-3"><Smartphone className="w-8 h-8 text-indigo-600" /> Oylik Reja va Sotuvlar</h2>
+                <h2 className="text-2xl font-black text-white flex items-center gap-3"><Smartphone className="w-8 h-8 text-brand-gold" /> {t(language, 'monthly_plan_sales')}</h2>
                 <div className="relative">
                   <div 
                     onClick={() => setShowMonthPicker(!showMonthPicker)}
-                    className="flex items-center gap-3 bg-white pl-3 pr-6 py-2 rounded-2xl border border-gray-200 shadow-sm hover:shadow-md hover:border-indigo-300 transition-all cursor-pointer"
+                    className="flex items-center gap-3 bg-brand-black pl-3 pr-6 py-2 rounded-2xl border border-white/10 shadow-sm hover:border-brand-gold/30 transition-all cursor-pointer"
                   >
-                    <div className="w-10 h-10 rounded-xl bg-indigo-50 flex items-center justify-center text-indigo-600 group-hover:scale-110 transition-transform">
+                    <div className="w-10 h-10 rounded-xl bg-brand-gold/10 flex items-center justify-center text-brand-gold group-hover:scale-110 transition-transform">
                       <Calendar className="w-5 h-5" />
                     </div>
-                    <span className="text-sm font-black text-gray-800 capitalize leading-none">
+                    <span className="text-sm font-black text-white capitalize leading-none">
                       {(() => {
-                        if (!targetMonth) return 'Oy tanlang';
+                        if (!targetMonth) return t(language, 'select_month');
                         const [y, m] = targetMonth.split('-');
-                        const monthNames = ['Yanvar', 'Fevral', 'Mart', 'Aprel', 'May', 'Iyun', 'Iyul', 'Avgust', 'Sentabr', 'Oktabr', 'Noyabr', 'Dekabr'];
+                        const monthNames = translations[language].month_names;
                         return `${monthNames[parseInt(m) - 1]} ${y}`;
                       })()}
                     </span>
@@ -1609,7 +1655,7 @@ const ManagerPanel: React.FC<ManagerPanelProps> = ({ state, approveUser, updateU
                   {showMonthPicker && (
                     <>
                       <div className="fixed inset-0 z-40" onClick={() => setShowMonthPicker(false)}></div>
-                      <div className="absolute top-full left-0 mt-4 bg-white rounded-3xl shadow-2xl border border-gray-100 p-6 z-50 w-80 animate-in fade-in zoom-in-95 duration-200">
+                      <div className="absolute top-full left-0 mt-4 bg-brand-dark rounded-3xl shadow-2xl border border-white/10 p-6 z-50 w-80 animate-in fade-in zoom-in-95 duration-200">
                         <div className="flex items-center justify-between mb-6">
                           <button 
                             onClick={(e) => {
@@ -1617,11 +1663,11 @@ const ManagerPanel: React.FC<ManagerPanelProps> = ({ state, approveUser, updateU
                               const [y, m] = (targetMonth || new Date().toISOString().slice(0, 7)).split('-');
                               setTargetMonth(`${parseInt(y) - 1}-${m}`);
                             }}
-                            className="p-2 hover:bg-gray-100 rounded-xl transition-colors text-gray-600"
+                            className="p-2 hover:bg-white/5 rounded-xl transition-colors text-white/30"
                           >
                             <ChevronLeft className="w-5 h-5" />
                           </button>
-                          <span className="text-lg font-black text-gray-800">
+                          <span className="text-lg font-black text-white">
                             {targetMonth.split('-')[0]}
                           </span>
                           <button 
@@ -1630,13 +1676,13 @@ const ManagerPanel: React.FC<ManagerPanelProps> = ({ state, approveUser, updateU
                               const [y, m] = (targetMonth || new Date().toISOString().slice(0, 7)).split('-');
                               setTargetMonth(`${parseInt(y) + 1}-${m}`);
                             }}
-                            className="p-2 hover:bg-gray-100 rounded-xl transition-colors text-gray-600"
+                            className="p-2 hover:bg-white/5 rounded-xl transition-colors text-white/30"
                           >
                             <ChevronRight className="w-5 h-5" />
                           </button>
                         </div>
                         <div className="grid grid-cols-3 gap-3">
-                          {['Yan', 'Fev', 'Mar', 'Apr', 'May', 'Iyun', 'Iyul', 'Avg', 'Sen', 'Okt', 'Noy', 'Dek'].map((mName, i) => {
+                          {translations[language].month_names_short.map((mName, i) => {
                             const monthNum = String(i + 1).padStart(2, '0');
                             const currentYear = (targetMonth || new Date().toISOString().slice(0, 7)).split('-')[0];
                             const isSelected = targetMonth === `${currentYear}-${monthNum}`;
@@ -1650,8 +1696,8 @@ const ManagerPanel: React.FC<ManagerPanelProps> = ({ state, approveUser, updateU
                                 }}
                                 className={`py-3 rounded-xl text-sm font-bold transition-all ${
                                   isSelected 
-                                    ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-200 scale-105' 
-                                    : 'bg-gray-50 text-gray-600 hover:bg-indigo-50 hover:text-indigo-600'
+                                    ? 'bg-brand-gold text-brand-black shadow-lg shadow-brand-gold/20 scale-105' 
+                                    : 'bg-brand-black text-white/30 hover:bg-brand-gold/10 hover:text-brand-gold'
                                 }`}
                               >
                                 {mName}
@@ -1680,9 +1726,9 @@ const ManagerPanel: React.FC<ManagerPanelProps> = ({ state, approveUser, updateU
                         });
                         setShowTargetForm(true);
                       }}
-                      className="bg-indigo-600 text-white px-6 py-3 rounded-2xl text-[10px] font-black uppercase tracking-widest flex items-center gap-2 hover:bg-indigo-700 active:scale-95 transition-all shadow-lg shadow-indigo-100"
+                      className="bg-brand-gold text-brand-black px-6 py-3 rounded-2xl text-[10px] font-black uppercase tracking-widest flex items-center gap-2 hover:bg-brand-gold/90 active:scale-95 transition-all shadow-lg shadow-brand-gold/20"
                     >
-                      <Plus className="w-4 h-4" /> Reja Kiritish
+                      <Plus className="w-4 h-4" /> {t(language, 'enter_plan')}
                     </button>
                     <button 
                       onClick={() => {
@@ -1710,9 +1756,15 @@ const ManagerPanel: React.FC<ManagerPanelProps> = ({ state, approveUser, updateU
                         
                         setShowOfficeForm(true);
                       }}
-                      className="bg-white text-indigo-600 border border-indigo-100 px-6 py-3 rounded-2xl text-[10px] font-black uppercase tracking-widest flex items-center gap-2 hover:bg-indigo-50 active:scale-95 transition-all shadow-sm"
+                      className="bg-brand-black text-brand-gold border border-brand-gold/20 px-6 py-3 rounded-2xl text-[10px] font-black uppercase tracking-widest flex items-center gap-2 hover:bg-brand-gold/10 active:scale-95 transition-all shadow-sm"
                     >
-                      <LayoutGrid className="w-4 h-4" /> Ofis Kiritish
+                      <LayoutGrid className="w-4 h-4" /> {t(language, 'enter_office')}
+                    </button>
+                    <button 
+                      onClick={() => setShowTariffForm(true)}
+                      className="bg-brand-black text-white border border-white/10 px-6 py-3 rounded-2xl text-[10px] font-black uppercase tracking-widest flex items-center gap-2 hover:bg-white/5 active:scale-95 transition-all shadow-sm"
+                    >
+                      <Plus className="w-4 h-4" /> {t(language, 'enter_tariff')}
                     </button>
                   </>
                 )}
@@ -1720,27 +1772,27 @@ const ManagerPanel: React.FC<ManagerPanelProps> = ({ state, approveUser, updateU
             </div>
 
             {showOfficeForm && (
-              <div className="mb-10 p-8 bg-indigo-50/50 rounded-[2.5rem] border border-indigo-100 animate-in slide-in-from-top duration-300">
+              <div className="mb-10 p-8 bg-brand-black rounded-[2.5rem] border border-white/10 animate-in slide-in-from-top duration-300">
                 <div className="flex items-center justify-between mb-6">
-                  <h3 className="text-lg font-black text-indigo-900">{targetMonth} uchun ofis va mobil ofis sotuvlarini kiritish</h3>
-                  <button onClick={() => setShowOfficeForm(false)} className="p-2 text-gray-400 hover:text-red-500 transition"><X className="w-5 h-5" /></button>
+                  <h3 className="text-lg font-black text-white">{targetMonth} uchun ofis va mobil ofis sotuvlarini kiritish</h3>
+                  <button onClick={() => setShowOfficeForm(false)} className="p-2 text-white/30 hover:text-red-500 transition"><X className="w-5 h-5" /></button>
                 </div>
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-6">
-                  {['Ucell', 'Mobiuz', 'Beeline', 'Uztelecom'].map(company => (
-                    <div key={company} className="space-y-4 bg-white p-4 rounded-2xl border border-indigo-50 shadow-sm">
-                      <h4 className="font-black text-gray-800 text-center border-b border-gray-100 pb-2 mb-2">{company}</h4>
+                  {['Ucell', 'Uztelecom', 'Mobiuz', 'Beeline'].map(company => (
+                    <div key={company} className="space-y-4 bg-brand-dark p-4 rounded-2xl border border-white/5 shadow-sm">
+                      <h4 className="font-black text-white text-center border-b border-white/10 pb-2 mb-2">{company}</h4>
                       
                       <div className="space-y-1.5">
-                        <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest pl-2">Ofis (dona)</label>
+                        <label className="text-[9px] font-black text-white/30 uppercase tracking-widest pl-2">{t(language, 'office')} ({t(language, 'pcs')})</label>
                         <input 
                           type="text" 
                           inputMode="numeric"
                           pattern="[0-9]*"
-                          className="w-full p-3 border border-gray-200 rounded-xl bg-gray-50 text-sm font-bold outline-none focus:border-indigo-600 transition"
+                          className="w-full p-3 border border-white/10 rounded-xl bg-brand-black text-white text-sm font-bold outline-none focus:border-brand-gold transition"
                           value={officeForm[company as keyof typeof officeForm]}
                           onChange={e => {
                             const val = e.target.value;
-                            if (val === '' || /^\d+$/.test(val)) {
+                            if (val === '' || (/^\d+$/.test(val) && val.length <= 7)) {
                               setOfficeForm({...officeForm, [company]: val});
                             }
                           }}
@@ -1748,16 +1800,16 @@ const ManagerPanel: React.FC<ManagerPanelProps> = ({ state, approveUser, updateU
                       </div>
 
                       <div className="space-y-1.5">
-                        <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest pl-2">Mobil Ofis (dona)</label>
+                        <label className="text-[9px] font-black text-white/30 uppercase tracking-widest pl-2">{t(language, 'mobile_office')} ({t(language, 'pcs')})</label>
                         <input 
                           type="text" 
                           inputMode="numeric"
                           pattern="[0-9]*"
-                          className="w-full p-3 border border-gray-200 rounded-xl bg-gray-50 text-sm font-bold outline-none focus:border-indigo-600 transition"
+                          className="w-full p-3 border border-white/10 rounded-xl bg-brand-black text-white text-sm font-bold outline-none focus:border-brand-gold transition"
                           value={mobileOfficeForm[company as keyof typeof mobileOfficeForm]}
                           onChange={e => {
                             const val = e.target.value;
-                            if (val === '' || /^\d+$/.test(val)) {
+                            if (val === '' || (/^\d+$/.test(val) && val.length <= 7)) {
                               setMobileOfficeForm({...mobileOfficeForm, [company]: val});
                             }
                           }}
@@ -1786,13 +1838,13 @@ const ManagerPanel: React.FC<ManagerPanelProps> = ({ state, approveUser, updateU
                       setMonthlyTarget(targetMonth, currentTargets, parsedOfficeForm, parsedMobileOfficeForm);
                       setShowOfficeForm(false);
                     }}
-                    className="flex-1 bg-indigo-600 text-white py-5 rounded-2xl font-black uppercase tracking-widest text-[10px] shadow-lg hover:bg-indigo-700 transition-all"
+                    className="flex-1 bg-brand-gold text-brand-black py-5 rounded-2xl font-black uppercase tracking-widest text-[10px] shadow-lg shadow-brand-gold/20 hover:bg-brand-gold/90 transition-all"
                   >
                     Saqlash
                   </button>
                   <button 
                     onClick={() => setShowOfficeForm(false)}
-                    className="px-10 py-5 bg-white border border-gray-200 text-gray-400 rounded-2xl font-black uppercase tracking-widest text-[10px]"
+                    className="px-10 py-5 bg-white/5 border border-white/10 text-white/50 rounded-2xl font-black uppercase tracking-widest text-[10px] hover:bg-white/10 hover:text-white transition-all"
                   >
                     Bekor qilish
                   </button>
@@ -1801,24 +1853,24 @@ const ManagerPanel: React.FC<ManagerPanelProps> = ({ state, approveUser, updateU
             )}
 
             {showTargetForm && (
-              <div className="mb-10 p-8 bg-indigo-50/50 rounded-[2.5rem] border border-indigo-100 animate-in slide-in-from-top duration-300">
+              <div className="mb-10 p-8 bg-brand-black rounded-[2.5rem] border border-white/10 animate-in slide-in-from-top duration-300">
                 <div className="flex items-center justify-between mb-6">
-                  <h3 className="text-lg font-black text-indigo-900">{targetMonth} uchun reja kiritish</h3>
-                  <button onClick={() => setShowTargetForm(false)} className="p-2 text-gray-400 hover:text-red-500 transition"><X className="w-5 h-5" /></button>
+                  <h3 className="text-lg font-black text-white">{targetMonth} uchun {t(language, 'enter_plan').toLowerCase()}</h3>
+                  <button onClick={() => setShowTargetForm(false)} className="p-2 text-white/30 hover:text-red-500 transition"><X className="w-5 h-5" /></button>
                 </div>
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-6">
-                  {['Ucell', 'Mobiuz', 'Beeline', 'Uztelecom'].map(company => (
+                  {['Ucell', 'Uztelecom', 'Mobiuz', 'Beeline'].map(company => (
                     <div key={company} className="space-y-1.5">
-                      <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest pl-2">{company} (dona)</label>
+                      <label className="text-[10px] font-black text-white/30 uppercase tracking-widest pl-2">{company} (dona)</label>
                       <input 
                         type="text" 
                         inputMode="numeric"
                         pattern="[0-9]*"
-                        className="w-full p-4 border border-gray-200 rounded-2xl bg-white text-sm font-bold outline-none focus:border-indigo-600 transition"
+                        className="w-full p-4 border border-white/10 rounded-2xl bg-brand-dark text-white text-sm font-bold outline-none focus:border-brand-gold transition"
                         value={targetForm[company as keyof typeof targetForm]}
                         onChange={e => {
                           const val = e.target.value;
-                          if (val === '' || /^\d+$/.test(val)) {
+                          if (val === '' || (/^\d+$/.test(val) && val.length <= 7)) {
                             setTargetForm({...targetForm, [company]: val});
                           }
                         }}
@@ -1836,13 +1888,13 @@ const ManagerPanel: React.FC<ManagerPanelProps> = ({ state, approveUser, updateU
                       setMonthlyTarget(targetMonth, parsedTargetForm);
                       setShowTargetForm(false);
                     }}
-                    className="flex-1 bg-indigo-600 text-white py-5 rounded-2xl font-black uppercase tracking-widest text-[10px] shadow-lg hover:bg-indigo-700 transition-all"
+                    className="flex-1 bg-brand-gold text-brand-black py-5 rounded-2xl font-black uppercase tracking-widest text-[10px] shadow-lg shadow-brand-gold/20 hover:bg-brand-gold/90 transition-all"
                   >
                     Saqlash
                   </button>
                   <button 
                     onClick={() => setShowTargetForm(false)}
-                    className="px-10 py-5 bg-white border border-gray-200 text-gray-400 rounded-2xl font-black uppercase tracking-widest text-[10px]"
+                    className="px-10 py-5 bg-white/5 border border-white/10 text-white/50 rounded-2xl font-black uppercase tracking-widest text-[10px] hover:bg-white/10 hover:text-white transition-all"
                   >
                     Bekor qilish
                   </button>
@@ -1850,28 +1902,121 @@ const ManagerPanel: React.FC<ManagerPanelProps> = ({ state, approveUser, updateU
               </div>
             )}
 
+            {showTariffForm && (
+              <div className="mb-10 p-8 bg-brand-black rounded-[2.5rem] border border-white/10 animate-in slide-in-from-top duration-300">
+                <div className="flex items-center justify-between mb-6">
+                  <h3 className="text-lg font-black text-white">Tariflar Kiritish</h3>
+                  <button onClick={() => setShowTariffForm(false)} className="p-2 text-white/30 hover:text-red-500 transition"><X className="w-5 h-5" /></button>
+                </div>
+                
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
+                  <div>
+                    <label className="text-[10px] font-black text-white/30 uppercase tracking-widest pl-2 mb-1 block">Kompaniya</label>
+                    <div className="relative">
+                      <button
+                        type="button"
+                        onClick={() => setOpenDropdown(openDropdown === 'tariffCompany' ? null : 'tariffCompany')}
+                        className="w-full p-4 pr-10 border border-white/10 rounded-2xl bg-brand-dark text-sm font-bold outline-none focus:border-brand-gold transition text-white text-left flex items-center justify-between"
+                      >
+                        <span>{newTariff.company}</span>
+                        <ChevronDown className={`w-5 h-5 text-white/40 transition-transform ${openDropdown === 'tariffCompany' ? 'rotate-180' : ''}`} />
+                      </button>
+                      
+                      {openDropdown === 'tariffCompany' && (
+                        <>
+                          <div className="fixed inset-0 z-10" onClick={() => setOpenDropdown(null)}></div>
+                          <div className="absolute top-full left-0 right-0 mt-2 bg-brand-dark border border-white/10 rounded-2xl shadow-2xl z-20 overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+                            {['Ucell', 'Uztelecom', 'Mobiuz', 'Beeline'].map((c) => (
+                              <button
+                                type="button"
+                                key={c}
+                                onClick={() => {
+                                  setNewTariff({...newTariff, company: c});
+                                  setOpenDropdown(null);
+                                }}
+                                className={`w-full text-left p-4 text-sm font-bold hover:bg-white/5 transition-colors ${newTariff.company === c ? 'text-brand-gold bg-brand-gold/10' : 'text-white'}`}
+                              >
+                                {c}
+                              </button>
+                            ))}
+                          </div>
+                        </>
+                      )}
+                    </div>
+                  </div>
+                  <div>
+                    <label className="text-[10px] font-black text-white/30 uppercase tracking-widest pl-2 mb-1 block">Tarif Nomi</label>
+                    <input 
+                      type="text" 
+                      className="w-full p-4 border border-white/10 rounded-2xl bg-brand-dark text-white text-sm font-bold outline-none focus:border-brand-gold transition"
+                      placeholder="Masalan: 20GB"
+                      value={newTariff.name}
+                      onChange={e => setNewTariff({...newTariff, name: e.target.value})}
+                    />
+                  </div>
+                  <div className="flex items-end">
+                    <button 
+                      onClick={() => {
+                        if (newTariff.name.trim()) {
+                          addTariff(newTariff.company, newTariff.name.trim());
+                          setNewTariff({...newTariff, name: ''});
+                        }
+                      }}
+                      className="w-full bg-brand-gold text-brand-black p-4 rounded-2xl font-black uppercase tracking-widest text-[10px] shadow-lg shadow-brand-gold/20 hover:bg-brand-gold/90 transition-all flex items-center justify-center gap-2"
+                    >
+                      <Plus className="w-4 h-4" /> Qo'shish
+                    </button>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                  {['Ucell', 'Uztelecom', 'Mobiuz', 'Beeline'].map(company => (
+                    <div key={company} className="bg-brand-dark p-4 rounded-2xl border border-white/5 shadow-sm">
+                      <h4 className="font-black text-white text-center border-b border-white/10 pb-2 mb-4">{company}</h4>
+                      <div className="space-y-2 max-h-60 overflow-y-auto custom-scrollbar pr-1">
+                        {state.tariffs?.[company]?.map((tariff, idx) => (
+                          <div key={idx} className="flex items-center justify-between bg-brand-black p-3 rounded-xl border border-white/5 group hover:border-white/10 transition-colors">
+                            <span className="text-xs font-bold text-white/80">{tariff}</span>
+                            <button 
+                              onClick={() => removeTariff(company, tariff)}
+                              className="text-white/20 hover:text-red-500 transition-colors p-1"
+                            >
+                              <X className="w-3 h-3" />
+                            </button>
+                          </div>
+                        ))}
+                        {(!state.tariffs?.[company] || state.tariffs[company].length === 0) && (
+                          <p className="text-[10px] text-white/20 text-center italic py-4">Tariflar yo'q</p>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
             {inventoryModalUser && (
               <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-in fade-in duration-300">
-                <div className="bg-white rounded-[2.5rem] p-8 max-w-2xl w-full shadow-2xl animate-in zoom-in-95 duration-300">
+                <div className="bg-brand-black rounded-[2.5rem] p-8 max-w-2xl w-full shadow-2xl border border-white/10 animate-in zoom-in-95 duration-300">
                   <div className="flex items-center justify-between mb-6">
-                    <h3 className="text-xl font-black text-gray-800">
-                      {inventoryModalUser.firstName} {inventoryModalUser.lastName} - Simkarta Ombori
+                    <h3 className="text-xl font-black text-white">
+                      {inventoryModalUser.firstName} {inventoryModalUser.lastName} - {t(language, 'sim_inventory')}
                     </h3>
-                    <button onClick={() => setInventoryModalUser(null)} className="p-2 hover:bg-gray-100 rounded-full transition"><X className="w-5 h-5 text-gray-400" /></button>
+                    <button onClick={() => setInventoryModalUser(null)} className="p-2 hover:bg-white/5 rounded-full transition"><X className="w-5 h-5 text-white/30" /></button>
                   </div>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
-                    {['Ucell', 'Mobiuz', 'Beeline', 'Uztelecom'].map(company => (
+                    {['Ucell', 'Uztelecom', 'Mobiuz', 'Beeline'].map(company => (
                       <div key={company} className="space-y-2">
-                        <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest pl-2">{company} (mavjud)</label>
+                        <label className="text-[10px] font-black text-white/30 uppercase tracking-widest pl-2">{company} (mavjud)</label>
                         <input 
                           type="text" 
                           inputMode="numeric"
                           pattern="[0-9]*"
-                          className="w-full p-4 border border-gray-200 rounded-2xl bg-white text-lg font-bold outline-none focus:border-indigo-600 transition"
+                          className="w-full p-4 border border-white/10 rounded-2xl bg-brand-dark text-white text-lg font-bold outline-none focus:border-brand-gold transition"
                           value={inventoryForm[company as keyof typeof inventoryForm]}
                           onChange={e => {
                             const val = e.target.value;
-                            if (val === '' || /^\d+$/.test(val)) {
+                            if (val === '' || (/^\d+$/.test(val) && val.length <= 7)) {
                               setInventoryForm({...inventoryForm, [company]: val});
                             }
                           }}
@@ -1889,13 +2034,13 @@ const ManagerPanel: React.FC<ManagerPanelProps> = ({ state, approveUser, updateU
                         updateUser(inventoryModalUser.id, { inventory: parsedInventoryForm });
                         setInventoryModalUser(null);
                       }}
-                      className="flex-1 bg-indigo-600 text-white py-4 rounded-2xl font-black uppercase tracking-widest text-xs shadow-lg hover:bg-indigo-700 transition-all"
+                      className="flex-1 bg-brand-gold text-brand-black py-4 rounded-2xl font-black uppercase tracking-widest text-xs shadow-lg shadow-brand-gold/20 hover:bg-brand-gold/90 transition-all"
                     >
                       Saqlash
                     </button>
                     <button 
                       onClick={() => setInventoryModalUser(null)}
-                      className="px-8 py-4 bg-gray-100 text-gray-500 rounded-2xl font-black uppercase tracking-widest text-xs hover:bg-gray-200 transition-all"
+                      className="px-8 py-4 bg-white/5 border border-white/10 text-white/50 rounded-2xl font-black uppercase tracking-widest text-xs hover:bg-white/10 hover:text-white transition-all"
                     >
                       Bekor qilish
                     </button>
@@ -1906,10 +2051,10 @@ const ManagerPanel: React.FC<ManagerPanelProps> = ({ state, approveUser, updateU
             
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
               {[
-                { name: 'Ucell', color: 'bg-purple-600', textColor: 'text-purple-600' },
-                { name: 'Mobiuz', color: 'bg-red-600', textColor: 'text-red-600' },
-                { name: 'Beeline', color: 'bg-yellow-400', textColor: 'text-yellow-600' },
-                { name: 'Uztelecom', color: 'bg-blue-500', textColor: 'text-blue-500' }
+                { name: 'Ucell', color: 'bg-[#9b51e0]', textColor: 'text-[#9b51e0]' },
+                { name: 'Uztelecom', color: 'bg-[#009ee0]', textColor: 'text-[#009ee0]' },
+                { name: 'Mobiuz', color: 'bg-[#eb1c24]', textColor: 'text-[#eb1c24]' },
+                { name: 'Beeline', color: 'bg-[#fdb913]', textColor: 'text-[#fdb913]' }
               ].map(company => {
                 const target = state.monthlyTargets?.find(t => t.month === targetMonth)?.targets?.[company.name] || 0;
                 const officeCount = state.monthlyTargets?.find(t => t.month === targetMonth)?.officeCounts?.[company.name] || 0;
@@ -1919,40 +2064,40 @@ const ManagerPanel: React.FC<ManagerPanelProps> = ({ state, approveUser, updateU
                 const percentage = Math.min(100, rawPercentage);
                 
                 return (
-                  <div key={company.name} className="p-8 bg-white rounded-[2.5rem] border border-gray-100 shadow-sm hover:shadow-xl hover:-translate-y-1 transition-all duration-500 group">
+                  <div key={company.name} className="p-8 bg-brand-dark rounded-[2.5rem] border border-white/10 shadow-sm hover:border-brand-gold/30 hover:-translate-y-1 transition-all duration-500 group">
                     <div className="flex items-center justify-between mb-6">
-                      <div className={`w-14 h-14 ${company.color} rounded-2xl shadow-lg flex items-center justify-center text-white group-hover:rotate-12 transition-transform`}>
+                      <div className={`w-14 h-14 ${company.color} rounded-2xl shadow-lg flex items-center justify-center text-white keep-white group-hover:rotate-12 transition-transform`}>
                         <Smartphone className="w-7 h-7" />
                       </div>
                       <div className="text-right">
-                        <p className={`text-3xl font-black ${company.textColor}`}>{sales}</p>
-                        <p className="text-[9px] font-black text-gray-400 uppercase tracking-widest">Sotildi</p>
+                        <p className={`text-3xl font-black ${company.textColor}`}>{formatLargeNumber(sales)}</p>
+                        <p className="text-[9px] font-black text-white/30 uppercase tracking-widest">{t(language, 'sold')}</p>
                       </div>
                     </div>
 
                     <div className="space-y-4">
                       <div className="flex items-center justify-between">
-                        <h3 className="font-black text-gray-800 text-lg">{company.name}</h3>
-                        <span className={`text-[10px] font-bold px-2 py-1 rounded-lg ${sales >= target && target > 0 ? 'text-green-500 bg-green-50' : 'text-blue-500 bg-blue-50'}`}>
-                          {sales >= target && target > 0 ? 'Bajarildi' : 'Jarayonda'}
+                        <h3 className="font-black text-white text-lg">{company.name}</h3>
+                        <span className={`text-[10px] font-bold px-2 py-1 rounded-lg ${sales >= target && target > 0 ? 'text-green-400 bg-green-400/10' : 'text-brand-gold bg-brand-gold/10'}`}>
+                          {sales >= target && target > 0 ? 'Bajarildi' : t(language, 'in_progress')}
                         </span>
                       </div>
-                      <div className="w-full bg-gray-100 h-1.5 rounded-full overflow-hidden">
+                      <div className="w-full bg-white/5 h-1.5 rounded-full overflow-hidden">
                         <div className={`h-full ${company.color} rounded-full transition-all duration-1000`} style={{ width: `${percentage}%` }}></div>
                       </div>
-                      <div className="flex justify-between text-[9px] font-black text-gray-400 uppercase tracking-widest">
-                        <span>{sales} / {target}</span>
+                      <div className="flex justify-between text-[9px] font-black text-white/30 uppercase tracking-widest">
+                        <span>{formatLargeNumber(sales)} / {formatLargeNumber(target)}</span>
                         <span>{Math.round(rawPercentage)}%</span>
                       </div>
                       
-                      <div className="pt-4 mt-4 border-t border-gray-50 grid grid-cols-2 gap-2">
-                        <div className="bg-gray-50 p-2 rounded-xl text-center">
-                          <p className="text-[8px] font-black text-gray-400 uppercase tracking-widest mb-0.5">Ofis</p>
-                          <p className="text-sm font-black text-gray-700">{officeCount}</p>
+                      <div className="pt-4 mt-4 border-t border-white/5 grid grid-cols-2 gap-2">
+                        <div className="bg-brand-black p-2 rounded-xl text-center border border-white/5">
+                          <p className="text-[8px] font-black text-white/30 uppercase tracking-widest mb-0.5">{t(language, 'office')}</p>
+                          <p className="text-sm font-black text-white">{formatLargeNumber(officeCount)}</p>
                         </div>
-                        <div className="bg-gray-50 p-2 rounded-xl text-center">
-                          <p className="text-[8px] font-black text-gray-400 uppercase tracking-widest mb-0.5">Mobil Ofis</p>
-                          <p className="text-sm font-black text-gray-700">{mobileOfficeCount}</p>
+                        <div className="bg-brand-black p-2 rounded-xl text-center border border-white/5">
+                          <p className="text-[8px] font-black text-white/30 uppercase tracking-widest mb-0.5">{t(language, 'mobile_office')}</p>
+                          <p className="text-sm font-black text-white">{formatLargeNumber(mobileOfficeCount)}</p>
                         </div>
                       </div>
                     </div>
@@ -1962,11 +2107,11 @@ const ManagerPanel: React.FC<ManagerPanelProps> = ({ state, approveUser, updateU
             </div>
           </div>
 
-          <div className="bg-white p-10 rounded-[3rem] shadow-xl border border-gray-100">
+          <div className="bg-brand-dark p-10 rounded-[3rem] shadow-xl border border-white/10">
             <div className="flex items-center justify-between mb-6">
-              <h3 className="text-xl font-black text-gray-800">Mavjud Simkartalar Ro'yxati</h3>
-              <div className="bg-indigo-50 text-indigo-600 px-4 py-2 rounded-xl font-black text-sm uppercase tracking-widest border border-indigo-100">
-                Jami: {operators.reduce((acc: number, user: User) => acc + Object.values(user.inventory || {}).reduce((sum: number, count: number) => sum + count, 0), 0)} dona
+              <h3 className="text-xl font-black text-white">{t(language, 'available_simcards')}</h3>
+              <div className="bg-brand-gold/10 text-brand-gold px-4 py-2 rounded-xl font-black text-sm uppercase tracking-widest border border-brand-gold/20">
+                {t(language, 'total')}: {formatLargeNumber(operators.reduce((acc: number, user: User) => acc + Object.values(user.inventory || {}).reduce((sum: number, count: any) => sum + Number(count), 0), 0))} {t(language, 'pcs')}
               </div>
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -1978,7 +2123,7 @@ const ManagerPanel: React.FC<ManagerPanelProps> = ({ state, approveUser, updateU
                   'Uztelecom': 0
                 };
 
-                const totalSims = Object.values(counts).reduce((a: number, b: number) => a + b, 0);
+                const totalSims = Object.values(counts).reduce((a: number, b: any) => a + Number(b), 0);
 
                 return (
                   <div 
@@ -1992,11 +2137,11 @@ const ManagerPanel: React.FC<ManagerPanelProps> = ({ state, approveUser, updateU
                         'Uztelecom': counts['Uztelecom'] || 0
                       });
                     }}
-                    className="bg-white p-6 rounded-[2rem] border border-gray-100 shadow-sm hover:shadow-md transition-all cursor-pointer group active:scale-95"
+                    className="bg-brand-black p-6 rounded-[2rem] border border-white/10 shadow-sm hover:border-brand-gold/30 transition-all cursor-pointer group active:scale-95"
                   >
                     <div className="flex items-center justify-between mb-6">
                       <div className="flex items-center gap-4">
-                        <div className="w-14 h-14 rounded-2xl bg-gray-200 flex items-center justify-center font-black text-gray-800 overflow-hidden text-xl shadow-inner">
+                        <div className="w-14 h-14 rounded-2xl bg-white/5 flex items-center justify-center font-black text-white overflow-hidden text-xl shadow-inner">
                           {user.photo ? (
                             <img src={user.photo} alt={user.firstName} className="w-full h-full object-cover" />
                           ) : (
@@ -2004,25 +2149,25 @@ const ManagerPanel: React.FC<ManagerPanelProps> = ({ state, approveUser, updateU
                           )}
                         </div>
                         <div>
-                          <h4 className="text-2xl font-black text-gray-800 leading-none mb-1 group-hover:text-indigo-600 transition-colors">{user.firstName} {user.lastName}</h4>
-                          <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">OPERATOR</p>
+                          <h4 className="text-2xl font-black text-white leading-none mb-1 group-hover:text-brand-gold transition-colors">{user.firstName} {user.lastName}</h4>
+                          <p className="text-[10px] font-bold text-white/30 uppercase tracking-widest">{t(language, 'operator')}</p>
                         </div>
                       </div>
-                      <div className="text-right bg-indigo-50 px-4 py-2 rounded-2xl border border-indigo-100 group-hover:bg-indigo-600 group-hover:text-white transition-colors">
-                        <p className="text-2xl font-black text-indigo-600 group-hover:text-white">{totalSims}</p>
-                        <p className="text-[8px] font-black text-indigo-400 uppercase tracking-widest group-hover:text-indigo-200">Jami</p>
+                      <div className="text-right bg-brand-gold/10 px-4 py-2 rounded-2xl border border-brand-gold/20 group-hover:bg-brand-gold group-hover:text-brand-black transition-colors">
+                        <p className="text-2xl font-black text-brand-gold group-hover:text-brand-black">{formatLargeNumber(totalSims)}</p>
+                        <p className="text-[8px] font-black text-brand-gold/70 uppercase tracking-widest group-hover:text-brand-black/70">{t(language, 'total')}</p>
                       </div>
                     </div>
                     <div className="grid grid-cols-2 gap-3">
                       {[
-                        { name: 'Ucell', color: 'text-purple-600', bg: 'bg-purple-50' },
-                        { name: 'Mobiuz', color: 'text-red-600', bg: 'bg-red-50' },
-                        { name: 'Beeline', color: 'text-yellow-600', bg: 'bg-yellow-50' },
-                        { name: 'Uztelecom', color: 'text-blue-600', bg: 'bg-blue-50' }
+                        { name: 'Ucell', color: 'text-[#9b51e0]', bg: 'bg-[#9b51e0]/10', border: 'border-[#9b51e0]/20' },
+                        { name: 'Uztelecom', color: 'text-[#009ee0]', bg: 'bg-[#009ee0]/10', border: 'border-[#009ee0]/20' },
+                        { name: 'Mobiuz', color: 'text-[#eb1c24]', bg: 'bg-[#eb1c24]/10', border: 'border-[#eb1c24]/20' },
+                        { name: 'Beeline', color: 'text-[#fdb913]', bg: 'bg-[#fdb913]/10', border: 'border-[#fdb913]/20' }
                       ].map(provider => (
-                        <div key={provider.name} className={`p-4 rounded-2xl ${provider.bg} border border-gray-100/50`}>
-                          <p className="text-[9px] font-black text-gray-400 uppercase tracking-widest mb-2">{provider.name}</p>
-                          <p className={`text-2xl font-black ${provider.color}`}>{counts[provider.name as keyof typeof counts]} <span className="text-[10px] text-gray-400 font-bold">dona</span></p>
+                        <div key={provider.name} className={`p-4 rounded-2xl ${provider.bg} border ${provider.border}`}>
+                          <p className="text-[9px] font-black text-white/50 uppercase tracking-widest mb-2">{provider.name}</p>
+                          <p className={`text-2xl font-black ${provider.color}`}>{formatLargeNumber(counts[provider.name as keyof typeof counts])} <span className="text-[10px] text-white/30 font-bold">dona</span></p>
                         </div>
                       ))}
                     </div>
@@ -2037,31 +2182,31 @@ const ManagerPanel: React.FC<ManagerPanelProps> = ({ state, approveUser, updateU
       {activeTab === 'approvals' && (
         <div className="max-w-3xl mx-auto space-y-6 animate-in fade-in">
           {pendingUsers.map(u => (
-            <div key={u.id} className="bg-white p-6 rounded-[2rem] border border-gray-100 flex items-center justify-between shadow-sm">
+            <div key={u.id} className="bg-brand-dark p-6 rounded-[2rem] border border-white/10 flex items-center justify-between shadow-sm">
               <div className="flex items-center gap-4">
-                <div className="w-14 h-14 bg-indigo-50 text-indigo-600 rounded-2xl flex items-center justify-center font-black text-xl">{u.firstName?.[0]}</div>
-                <div><h4 className="text-lg font-black text-gray-800 leading-none mb-1">{u.firstName} {u.lastName}</h4><p className="text-xs text-gray-400 font-bold">{u.phone} • {u.role.replace('_', ' ')}</p></div>
+                <div className="w-14 h-14 bg-brand-gold/10 text-brand-gold rounded-2xl flex items-center justify-center font-black text-xl">{u.firstName?.[0]}</div>
+                <div><h4 className="text-lg font-black text-white leading-none mb-1">{u.firstName} {u.lastName}</h4><p className="text-xs text-white/30 font-bold">{u.phone} • {u.role.replace('_', ' ')}</p></div>
               </div>
-              <button onClick={() => approveUser(u.id)} className="p-4 bg-green-500 text-white rounded-2xl shadow-xl shadow-green-100 transition hover:bg-green-600"><CheckCircle className="w-6 h-6" /></button>
+              <button onClick={() => approveUser(u.id)} className="p-4 bg-brand-gold text-brand-black rounded-2xl shadow-xl shadow-brand-gold/20 transition hover:bg-brand-gold/90"><CheckCircle className="w-6 h-6" /></button>
             </div>
           ))}
-          {pendingUsers.length === 0 && <div className="text-center py-20 bg-white rounded-[2rem] border border-gray-100 italic text-gray-400 font-bold uppercase tracking-widest text-[10px]">Yangi so'rovlar mavjud emas</div>}
+          {pendingUsers.length === 0 && <div className="text-center py-20 bg-brand-dark rounded-[2rem] border border-white/10 italic text-white/30 font-bold uppercase tracking-widest text-[10px]">Yangi so'rovlar mavjud emas</div>}
         </div>
       )}
 
       {activeTab === 'reports' && (
-        <div className="bg-white rounded-[2rem] border border-gray-100 shadow-sm overflow-hidden animate-in fade-in">
-          <div className="p-8 border-b border-gray-50"><h2 className="text-xl font-black text-gray-800">Barcha Kunlik Hisobotlar</h2></div>
+        <div className="bg-brand-dark rounded-[2rem] border border-white/10 shadow-sm overflow-hidden animate-in fade-in">
+          <div className="p-8 border-b border-white/5"><h2 className="text-xl font-black text-white">{t(language, 'all_daily_reports')}</h2></div>
           <div className="overflow-x-auto">
             <table className="w-full text-left">
-              <thead className="bg-gray-50 text-gray-400 text-[10px] font-black uppercase tracking-widest"><tr><th className="px-8 py-4">Xodim</th><th className="px-8 py-4">Sana</th><th className="px-8 py-4">Xulosa</th><th className="px-8 py-4 text-right">Vaqt</th></tr></thead>
-              <tbody className="divide-y divide-gray-50">
+              <thead className="bg-brand-black text-white/30 text-[10px] font-black uppercase tracking-widest"><tr><th className="px-8 py-4">{t(language, 'employee')}</th><th className="px-8 py-4">{t(language, 'date')}</th><th className="px-8 py-4">{t(language, 'summary')}</th><th className="px-8 py-4 text-right">{t(language, 'time')}</th></tr></thead>
+              <tbody className="divide-y divide-white/5">
                 {state.reports.sort((a,b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()).map((rep, idx) => {
                   const u = state.users.find(user => user.id === rep.userId);
                   return (
                     <tr 
                       key={idx} 
-                      className="hover:bg-blue-50/50 transition cursor-pointer group"
+                      className="hover:bg-white/5 transition cursor-pointer group"
                       onClick={() => {
                         setSelectedUserId(rep.userId);
                         setSelectedDay(rep.date);
@@ -2070,20 +2215,20 @@ const ManagerPanel: React.FC<ManagerPanelProps> = ({ state, approveUser, updateU
                     >
                       <td className="px-8 py-6">
                         <div className="flex items-center gap-3">
-                          <div className="w-8 h-8 rounded-lg bg-gray-100 flex items-center justify-center text-[10px] font-black text-gray-400 group-hover:bg-blue-600 group-hover:text-white transition-colors">
+                          <div className="w-8 h-8 rounded-lg bg-white/5 flex items-center justify-center text-[10px] font-black text-white/30 group-hover:bg-brand-gold group-hover:text-brand-black transition-colors">
                             {u?.firstName?.[0]}{u?.lastName?.[0]}
                           </div>
-                          <span className="font-bold text-gray-800">{u?.firstName} {u?.lastName}</span>
+                          <span className="font-bold text-white">{u?.firstName} {u?.lastName}</span>
                         </div>
                       </td>
-                      <td className="px-8 py-6 text-sm text-gray-400 font-medium">{rep.date}</td>
-                      <td className="px-8 py-6 text-sm text-gray-700 italic leading-relaxed truncate max-w-xs">"{rep.summary}"</td>
+                      <td className="px-8 py-6 text-sm text-white/30 font-medium">{rep.date}</td>
+                      <td className="px-8 py-6 text-sm text-white/70 italic leading-relaxed truncate max-w-xs">"{rep.summary}"</td>
                       <td className="px-8 py-6 text-right">
                         <div className="flex items-center justify-end gap-3">
-                          <span className="text-[10px] font-black text-indigo-600 bg-indigo-50 px-3 py-1 rounded-lg">
+                          <span className="text-[10px] font-black text-brand-gold bg-brand-gold/10 px-3 py-1 rounded-lg">
                             {new Date(rep.timestamp).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}
                           </span>
-                          <ChevronRight className="w-4 h-4 text-gray-300 group-hover:text-blue-600 transition-colors" />
+                          <ChevronRight className="w-4 h-4 text-white/10 group-hover:text-brand-gold transition-colors" />
                         </div>
                       </td>
                     </tr>
@@ -2109,7 +2254,7 @@ const ManagerPanel: React.FC<ManagerPanelProps> = ({ state, approveUser, updateU
           -webkit-tap-highlight-color: transparent;
         }
         .recharts-cartesian-grid-horizontal line, .recharts-cartesian-grid-vertical line {
-          stroke: #f1f5f9 !important;
+          stroke: rgba(255,255,255,0.05) !important;
         }
         .recharts-cartesian-axis-line {
           display: none !important;
@@ -2140,8 +2285,9 @@ const ManagerPanel: React.FC<ManagerPanelProps> = ({ state, approveUser, updateU
           display: flex;
           align-items: center;
           justify-content: center;
-          border: 2px solid white;
-          color: white;
+          border: 2px solid #D4AF37;
+          background: #0A0A0A;
+          color: #D4AF37;
           position: relative;
           z-index: 2;
         }
@@ -2156,7 +2302,7 @@ const ManagerPanel: React.FC<ManagerPanelProps> = ({ state, approveUser, updateU
           height: 0;
           border-left: 8px solid transparent;
           border-right: 8px solid transparent;
-          border-top: 10px solid;
+          border-top: 10px solid #D4AF37;
           margin-top: -2px;
           position: relative;
           z-index: 1;
@@ -2187,7 +2333,7 @@ const ManagerPanel: React.FC<ManagerPanelProps> = ({ state, approveUser, updateU
           width: 36px;
           height: 36px;
           border-radius: 50%;
-          background: inherit;
+          background: #D4AF37;
           opacity: 0.4;
           animation: markerPulseV2 2s infinite;
           z-index: 0;
@@ -2205,27 +2351,27 @@ const ManagerPanel: React.FC<ManagerPanelProps> = ({ state, approveUser, updateU
         .map-marker-pin-tear {
           width: 40px;
           height: 40px;
-          background: #2563eb;
+          background: #D4AF37;
           border-radius: 50% 50% 50% 0;
           transform: rotate(-45deg);
           display: flex;
           align-items: center;
           justify-content: center;
-          border: 3px solid white;
-          box-shadow: 0 10px 25px rgba(37, 99, 235, 0.4);
+          border: 3px solid #0A0A0A;
+          box-shadow: 0 10px 25px rgba(212, 175, 55, 0.4);
         }
         .pin-initials {
           transform: rotate(45deg);
-          color: white;
+          color: #0A0A0A;
           font-weight: 900;
           font-size: 12px;
           letter-spacing: -0.01em;
         }
         .map-custom-tooltip {
-          background: white;
-          border: none;
+          background: #1A1A1A;
+          border: 1px solid rgba(255,255,255,0.1);
           border-radius: 16px;
-          box-shadow: 0 15px 35px -5px rgba(0,0,0,0.15);
+          box-shadow: 0 15px 35px -5px rgba(0,0,0,0.5);
           padding: 0;
         }
         .no-scrollbar::-webkit-scrollbar {
@@ -2241,22 +2387,22 @@ const ManagerPanel: React.FC<ManagerPanelProps> = ({ state, approveUser, updateU
 };
 
 const StatCard = ({ label, value, icon, color }: any) => (
-  <div className="bg-white p-6 rounded-[2.5rem] border border-gray-100 flex items-center justify-between shadow-sm hover:-translate-y-1 transition-all group">
-    <div><p className="text-[9px] font-black text-gray-400 uppercase tracking-widest mb-1">{label}</p><p className="text-3xl font-black text-gray-800 leading-none">{value}</p></div>
-    <div className={`${color} text-white p-5 rounded-2xl shadow-xl transition-all group-hover:scale-110 group-hover:rotate-6`}>{React.cloneElement(icon, { className: 'w-7 h-7' })}</div>
+  <div className="bg-brand-dark p-6 rounded-[2.5rem] border border-white/10 flex items-center justify-between shadow-xl hover:-translate-y-1 transition-all group">
+    <div><p className="text-[9px] font-black text-white/40 uppercase tracking-widest mb-1">{label}</p><p className="text-3xl font-black text-white leading-none">{value}</p></div>
+    <div className={`${color} text-white keep-white p-5 rounded-2xl shadow-2xl transition-all group-hover:scale-110 group-hover:rotate-6`}>{React.cloneElement(icon, { className: 'w-7 h-7' })}</div>
   </div>
 );
 
 const RefinedStatCard = ({ label, value, icon, color, onClick, isActive }: any) => (
   <div 
     onClick={onClick}
-    className={`bg-white p-5 rounded-2xl border-2 transition-all ${onClick ? 'cursor-pointer active:scale-95' : ''} ${isActive ? 'ring-4 ring-blue-500/10 border-blue-500 shadow-xl' : 'border-gray-100 shadow-sm hover:border-blue-200'}`}
+    className={`bg-brand-dark p-5 rounded-2xl border-2 transition-all ${onClick ? 'cursor-pointer active:scale-95' : ''} ${isActive ? 'ring-4 ring-brand-gold/10 border-brand-gold shadow-xl' : 'border-white/10 shadow-sm hover:border-brand-gold/30'}`}
   >
     <div className="flex items-center gap-4">
       <div className={`${color} text-white p-3 rounded-xl shadow-md`}>{React.cloneElement(icon, { className: 'w-5 h-5' })}</div>
       <div>
-        <p className={`text-[8px] font-black uppercase tracking-widest mb-0.5 ${isActive ? 'text-blue-600' : 'text-gray-400'}`}>{label}</p>
-        <p className="text-lg font-black text-gray-800 truncate max-w-[100px]">{value}</p>
+        <p className={`text-[8px] font-black uppercase tracking-widest mb-0.5 ${isActive ? 'text-brand-gold' : 'text-white/40'}`}>{label}</p>
+        <p className="text-lg font-black text-white truncate max-w-[100px]">{value}</p>
       </div>
     </div>
   </div>

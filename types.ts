@@ -59,6 +59,13 @@ export interface Message {
   isRead: boolean;
 }
 
+export interface Rule {
+  id: string;
+  content: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface MonthlyTarget {
   month: string; // YYYY-MM
   targets: Record<string, number>; // company -> target count
@@ -74,5 +81,7 @@ export interface AppState {
   reports: DailyReport[];
   simInventory: Record<string, number>;
   messages: Message[];
+  rules: Rule[];
   monthlyTargets: MonthlyTarget[];
+  tariffs: Record<string, string[]>;
 }
