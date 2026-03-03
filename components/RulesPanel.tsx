@@ -2,6 +2,7 @@ import React, { useState, useRef, useMemo } from 'react';
 import { Rule, AppState } from '../types';
 import { t, Language } from '../translations';
 import { Plus, Trash2, Edit2, Save, X } from 'lucide-react';
+import { formatUzDateTime } from '../utils';
 import JoditEditor from 'jodit-react';
 
 interface RulesPanelProps {
@@ -137,7 +138,7 @@ const RulesPanel: React.FC<RulesPanelProps> = ({ state, setState, language }) =>
             <div key={rule.id} className="theme-blue-box p-6 rounded-2xl border border-white/10 shadow-lg group">
               <div className="flex items-start justify-between gap-4 mb-4">
                 <div className="text-[10px] font-bold theme-text-muted uppercase tracking-wider">
-                  {new Date(rule.updatedAt).toLocaleString('ru-RU')}
+                  {formatUzDateTime(rule.updatedAt)}
                 </div>
                 <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
                   <button

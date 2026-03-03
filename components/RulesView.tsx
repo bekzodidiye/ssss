@@ -2,6 +2,7 @@ import React from 'react';
 import { AppState } from '../types';
 import { t, Language } from '../translations';
 import { Info } from 'lucide-react';
+import { formatUzDateTime } from '../utils';
 
 interface RulesViewProps {
   state: AppState;
@@ -27,7 +28,7 @@ const RulesView: React.FC<RulesViewProps> = ({ state, language }) => {
                   <Info className="w-5 h-5" />
                 </div>
                 <div className="text-[10px] font-bold theme-text-muted uppercase tracking-wider mt-1.5">
-                  {new Date(rule.updatedAt).toLocaleString('ru-RU')}
+                  {formatUzDateTime(rule.updatedAt)}
                 </div>
               </div>
               <div 

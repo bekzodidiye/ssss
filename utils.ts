@@ -1,4 +1,14 @@
 
+export const formatUzTime = (date: Date | string | number) => {
+  const d = date ? new Date(date) : new Date();
+  return d.toLocaleTimeString("en-GB", { 
+    timeZone: "Asia/Tashkent", 
+    hour: '2-digit', 
+    minute: '2-digit', 
+    hour12: false 
+  });
+};
+
 export const getUzTime = (date?: Date | string | number) => {
   const d = date ? new Date(date) : new Date();
   // Convert to Uzbekistan time string and parse it back to a Date object
@@ -6,6 +16,19 @@ export const getUzTime = (date?: Date | string | number) => {
   // Note: This is a common trick to "force" a timezone for calculations
   const uzStr = d.toLocaleString("en-US", { timeZone: "Asia/Tashkent" });
   return new Date(uzStr);
+};
+
+export const formatUzDateTime = (date: Date | string | number) => {
+  const d = date ? new Date(date) : new Date();
+  return d.toLocaleString("en-GB", { 
+    timeZone: "Asia/Tashkent", 
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit', 
+    minute: '2-digit', 
+    hour12: false 
+  }).replace(',', '');
 };
 
 export const getTodayStr = () => {

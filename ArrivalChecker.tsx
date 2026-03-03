@@ -48,7 +48,7 @@ const ArrivalChecker: React.FC = () => {
     };
   });
 
-  const [activeTab, setActiveTab] = useState<'overview' | 'users' | 'reports' | 'approvals' | 'messages' | 'rules' | 'simcards'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'users' | 'reports' | 'approvals' | 'messages' | 'rules' | 'simcards' | 'monitoring'>('overview');
   const [operatorTab, setOperatorTab] = useState('checkin');
   const [isDarkMode, setIsDarkMode] = useState(() => {
     const saved = localStorage.getItem('paynet_app_dark_mode');
@@ -122,64 +122,65 @@ const ArrivalChecker: React.FC = () => {
   }
 
   return (
-    <div className={`min-h-screen bg-brand-black font-sans text-white ${state.currentUser.role === Role.MANAGER ? 'flex' : ''}`}>
-      {state.currentUser.role === Role.MANAGER ? (
-        <aside className="w-72 h-screen sticky top-0 flex flex-col bg-brand-black/80 backdrop-blur-md border-r border-white/10 theme-blue-box z-30 shrink-0">
-          <div className="p-6 border-b border-white/10">
-            <div className="flex items-center gap-3">
-              <div className="relative group">
-                <div className="absolute -inset-1 bg-brand-gold rounded-xl blur opacity-25 group-hover:opacity-50 transition duration-1000 group-hover:duration-200"></div>
-                <div className="relative w-12 h-12 bg-brand-black border border-brand-gold/50 rounded-xl flex flex-col items-center justify-center text-brand-gold font-black shadow-2xl overflow-hidden">
-                  <Crown className="w-6 h-6 mb-0.5" />
-                  <div className="flex gap-0.5 mt-0.5">
-                     <div className="w-1.5 h-1 bg-brand-gold/40 rounded-full"></div>
-                     <div className="w-1.5 h-1 bg-brand-gold/40 rounded-full"></div>
-                  </div>
-                </div>
-              </div>
-              <div className="flex flex-col">
-                <h1 className="text-xl font-black tracking-tighter gold-text-gradient leading-none uppercase">{t(language, 'brand_name')}</h1>
-                <h1 className="text-xs font-bold tracking-[0.2em] text-white/60 leading-none uppercase mt-1">{t(language, 'brand_subtitle')}</h1>
-              </div>
-            </div>
-          </div>
-
-          <div className="p-4 border-b border-white/10">
-            <div className="flex items-center justify-between bg-white/5 p-1.5 rounded-xl border border-white/10">
-              <button 
-                onClick={() => setIsCalculatorOpen(!isCalculatorOpen)}
-                className={`flex-1 p-2 flex justify-center transition-all rounded-lg ${isCalculatorOpen ? 'text-brand-gold bg-brand-gold/10 border border-brand-gold/30 shadow-lg shadow-brand-gold/10' : 'text-white/40 hover:text-brand-gold hover:bg-white/5 border border-transparent'}`}
-                title={t(language, 'calculator')}
-              >
-                <Hash className="w-4 h-4" />
-              </button>
-              <div className="w-px h-4 bg-white/10"></div>
-              <button 
-                onClick={() => setIsDarkMode(!isDarkMode)}
-                className="flex-1 p-2 flex justify-center text-white/40 hover:text-brand-gold transition-colors rounded-lg hover:bg-white/5"
-                title={isDarkMode ? t(language, 'day_mode') : t(language, 'night_mode')}
-              >
-                {isDarkMode ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
-              </button>
-              <div className="w-px h-4 bg-white/10"></div>
-              <div className="relative group flex-1">
-                <button className="w-full flex justify-center items-center gap-1.5 p-2 text-white/40 hover:text-brand-gold transition-colors rounded-lg hover:bg-white/5">
-                  <Globe className="w-4 h-4" />
-                  <span className="text-[10px] font-black uppercase tracking-widest">{language}</span>
-                </button>
-                <div className="absolute top-full left-0 mt-2 w-48 bg-brand-dark border border-white/10 rounded-xl shadow-2xl opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-50 overflow-hidden">
-                  <button onClick={() => setLanguage('uz')} className={`w-full text-left px-4 py-3 text-[10px] font-black uppercase tracking-widest transition-colors ${language === 'uz' ? 'bg-brand-gold/10 text-brand-gold' : 'text-white/60 hover:bg-white/5 hover:text-white'}`}>{t(language, 'uzbek')}</button>
-                  <button onClick={() => setLanguage('ru')} className={`w-full text-left px-4 py-3 text-[10px] font-black uppercase tracking-widest transition-colors border-t border-white/5 ${language === 'ru' ? 'bg-brand-gold/10 text-brand-gold' : 'text-white/60 hover:bg-white/5 hover:text-white'}`}>{t(language, 'russian')}</button>
-                  <button onClick={() => setLanguage('en')} className={`w-full text-left px-4 py-3 text-[10px] font-black uppercase tracking-widest transition-colors border-t border-white/5 ${language === 'en' ? 'bg-brand-gold/10 text-brand-gold' : 'text-white/60 hover:bg-white/5 hover:text-white'}`}>{t(language, 'english')}</button>
+    <div className={`min-h-screen bg-brand-black font-sans text-white flex ${isDarkMode ? 'dark' : ''}`}>
+      <aside className="w-72 h-screen sticky top-0 flex flex-col bg-brand-black/80 backdrop-blur-md border-r border-white/10 theme-blue-box z-30 shrink-0">
+        <div className="p-6 border-b border-white/10">
+          <div className="flex items-center gap-3">
+            <div className="relative group">
+              <div className="absolute -inset-1 bg-brand-gold rounded-xl blur opacity-25 group-hover:opacity-50 transition duration-1000 group-hover:duration-200"></div>
+              <div className="relative w-12 h-12 bg-brand-black border border-brand-gold/50 rounded-xl flex flex-col items-center justify-center text-brand-gold font-black shadow-2xl overflow-hidden">
+                <Crown className="w-6 h-6 mb-0.5" />
+                <div className="flex gap-0.5 mt-0.5">
+                   <div className="w-1.5 h-1 bg-brand-gold/40 rounded-full"></div>
+                   <div className="w-1.5 h-1 bg-brand-gold/40 rounded-full"></div>
                 </div>
               </div>
             </div>
+            <div className="flex flex-col">
+              <h1 className="text-xl font-black tracking-tighter gold-text-gradient leading-none uppercase">{t(language, 'brand_name')}</h1>
+              <h1 className="text-xs font-bold tracking-[0.2em] text-white/60 leading-none uppercase mt-1">{t(language, 'brand_subtitle')}</h1>
+            </div>
           </div>
+        </div>
 
-          <div className="flex-1 overflow-y-auto py-6 px-4 space-y-2 custom-scrollbar">
-            {[
+        <div className="p-4 border-b border-white/10">
+          <div className="flex items-center justify-between bg-white/5 p-1.5 rounded-xl border border-white/10">
+            <button 
+              onClick={() => setIsCalculatorOpen(!isCalculatorOpen)}
+              className={`flex-1 p-2 flex justify-center transition-all rounded-lg ${isCalculatorOpen ? 'text-brand-gold bg-brand-gold/10 border border-brand-gold/30 shadow-lg shadow-brand-gold/10' : 'text-white/40 hover:text-brand-gold hover:bg-white/5 border border-transparent'}`}
+              title={t(language, 'calculator')}
+            >
+              <Hash className="w-4 h-4" />
+            </button>
+            <div className="w-px h-4 bg-white/10"></div>
+            <button 
+              onClick={() => setIsDarkMode(!isDarkMode)}
+              className="flex-1 p-2 flex justify-center text-white/40 hover:text-brand-gold transition-colors rounded-lg hover:bg-white/5"
+              title={isDarkMode ? t(language, 'day_mode') : t(language, 'night_mode')}
+            >
+              {isDarkMode ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
+            </button>
+            <div className="w-px h-4 bg-white/10"></div>
+            <div className="relative group flex-1">
+              <button className="w-full flex justify-center items-center gap-1.5 p-2 text-white/40 hover:text-brand-gold transition-colors rounded-lg hover:bg-white/5">
+                <Globe className="w-4 h-4" />
+                <span className="text-[10px] font-black uppercase tracking-widest">{language}</span>
+              </button>
+              <div className="absolute top-full left-0 mt-2 w-48 bg-brand-dark border border-white/10 rounded-xl shadow-2xl opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-50 overflow-hidden">
+                <button onClick={() => setLanguage('uz')} className={`w-full text-left px-4 py-3 text-[10px] font-black uppercase tracking-widest transition-colors ${language === 'uz' ? 'bg-brand-gold/10 text-brand-gold' : 'text-white/60 hover:bg-white/5 hover:text-white'}`}>{t(language, 'uzbek')}</button>
+                <button onClick={() => setLanguage('ru')} className={`w-full text-left px-4 py-3 text-[10px] font-black uppercase tracking-widest transition-colors border-t border-white/5 ${language === 'ru' ? 'bg-brand-gold/10 text-brand-gold' : 'text-white/60 hover:bg-white/5 hover:text-white'}`}>{t(language, 'russian')}</button>
+                <button onClick={() => setLanguage('en')} className={`w-full text-left px-4 py-3 text-[10px] font-black uppercase tracking-widest transition-colors border-t border-white/5 ${language === 'en' ? 'bg-brand-gold/10 text-brand-gold' : 'text-white/60 hover:bg-white/5 hover:text-white'}`}>{t(language, 'english')}</button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div className="flex-1 overflow-y-auto py-6 px-4 space-y-2 custom-scrollbar">
+          {state.currentUser.role === Role.MANAGER ? (
+            [
               { id: 'overview', label: t(language, 'overview'), icon: '📊' },
               { id: 'users', label: t(language, 'employees'), icon: '👥' },
+              { id: 'monitoring', label: t(language, 'monitoring'), icon: '📈' },
               { id: 'reports', label: t(language, 'reports'), icon: '📝' },
               { id: 'simcards', label: t(language, 'inventory_plan'), icon: '📱' },
               { id: 'messages', label: t(language, 'messages'), icon: '💬' },
@@ -206,131 +207,59 @@ const ArrivalChecker: React.FC = () => {
                   <span className="bg-red-500 text-white text-[10px] px-2 py-0.5 rounded-full">{tab.count}</span>
                 ) : null}
               </button>
-            ))}
-          </div>
-
-          <div className="p-4 border-t border-white/10">
-            <div className="flex items-center justify-between bg-white/5 p-3 rounded-2xl border border-white/10">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-xl bg-brand-gold/10 border border-brand-gold/30 flex items-center justify-center text-brand-gold font-black text-sm">
-                  {state.currentUser.firstName[0]}
-                </div>
-                <div>
-                  <p className="text-xs font-black text-white tracking-tight">{state.currentUser.firstName} {state.currentUser.lastName}</p>
-                  <p className="text-[9px] text-brand-gold font-black uppercase tracking-widest">{state.currentUser.role.replace('_', ' ')}</p>
-                </div>
-              </div>
-              <button 
-                onClick={handleLogout}
-                className="p-2 text-white/40 hover:text-red-500 transition-all rounded-xl hover:bg-red-500/10 border border-transparent hover:border-red-500/20"
-                title={t(language, 'logout')}
+            ))
+          ) : (
+            [
+              { id: 'checkin', label: t(language, 'home'), icon: '🏠' },
+              { id: 'simcards', label: t(language, 'inventory'), icon: '📱' },
+              { id: 'monitoring', label: t(language, 'monitoring'), icon: '📈' },
+              { id: 'rating', label: t(language, 'rating'), icon: '🏆' },
+              { id: 'messages', label: t(language, 'messages'), icon: '💬' },
+              { id: 'rules', label: t(language, 'rules'), icon: '📋' },
+              { id: 'profile', label: t(language, 'profile'), icon: '👤' }
+            ].map(tab => (
+              <button
+                key={tab.id}
+                onClick={() => {
+                  setOperatorTab(tab.id);
+                  window.scrollTo({ top: 0, behavior: 'smooth' });
+                }}
+                className={`w-full flex items-center gap-3 px-4 py-3.5 rounded-xl text-xs font-black transition-all uppercase tracking-wider ${
+                  operatorTab === tab.id 
+                    ? 'bg-brand-gold text-brand-black shadow-lg shadow-brand-gold/20' 
+                    : 'bg-white/5 text-white/60 hover:bg-white/10 border border-white/5'
+                }`}
               >
-                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" x2="9" y1="12" y2="12"/></svg>
+                <span className="text-lg">{tab.icon}</span>
+                <span>{tab.label}</span>
               </button>
+            ))
+          )}
+        </div>
+
+        <div className="p-4 border-t border-white/10">
+          <div className="flex items-center justify-between bg-white/5 p-3 rounded-2xl border border-white/10">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-brand-gold/10 border border-brand-gold/30 flex items-center justify-center text-brand-gold font-black text-sm">
+                {state.currentUser.firstName[0]}
+              </div>
+              <div>
+                <p className="text-xs font-black text-white tracking-tight">{state.currentUser.firstName} {state.currentUser.lastName}</p>
+                <p className="text-[9px] text-brand-gold font-black uppercase tracking-widest">{state.currentUser.role.replace('_', ' ')}</p>
+              </div>
             </div>
+            <button 
+              onClick={handleLogout}
+              className="p-2 text-white/40 hover:text-red-500 transition-all rounded-xl hover:bg-red-500/10 border border-transparent hover:border-red-500/20"
+              title={t(language, 'logout')}
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" x2="9" y1="12" y2="12"/></svg>
+            </button>
           </div>
-        </aside>
-      ) : (
-        <header className="theme-blue-box bg-brand-black/80 backdrop-blur-md border-b border-white/10 relative z-30">
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-20 flex items-center justify-between gap-4">
-            <div className="flex items-center gap-3 shrink-0">
-              <div className="relative group">
-                <div className="absolute -inset-1 bg-brand-gold rounded-xl blur opacity-25 group-hover:opacity-50 transition duration-1000 group-hover:duration-200"></div>
-                <div className="relative w-12 h-12 bg-brand-black border border-brand-gold/50 rounded-xl flex flex-col items-center justify-center text-brand-gold font-black shadow-2xl overflow-hidden">
-                  <Crown className="w-6 h-6 mb-0.5" />
-                  <div className="flex gap-0.5 mt-0.5">
-                     <div className="w-1.5 h-1 bg-brand-gold/40 rounded-full"></div>
-                     <div className="w-1.5 h-1 bg-brand-gold/40 rounded-full"></div>
-                  </div>
-                </div>
-              </div>
-              <div className="flex flex-col">
-                <h1 className="text-xl font-black tracking-tighter gold-text-gradient leading-none uppercase">{t(language, 'brand_name')}</h1>
-                <h1 className="text-xs font-bold tracking-[0.2em] text-white/60 leading-none uppercase mt-1">{t(language, 'brand_subtitle')}</h1>
-              </div>
-            </div>
+        </div>
+      </aside>
 
-            <div className="flex-1 overflow-x-auto flex items-center justify-start sm:justify-center gap-1.5 no-scrollbar px-2 min-w-0">
-              {[
-                { id: 'checkin', label: t(language, 'home'), icon: '🏠' },
-                { id: 'simcards', label: t(language, 'inventory'), icon: '📱' },
-                { id: 'monitoring', label: t(language, 'monitoring'), icon: '📈' },
-                { id: 'rating', label: t(language, 'rating'), icon: '🏆' },
-                { id: 'messages', label: t(language, 'messages'), icon: '💬' },
-                { id: 'rules', label: t(language, 'rules'), icon: '📋' },
-                { id: 'profile', label: t(language, 'profile'), icon: '👤' }
-              ].map(tab => (
-                <button
-                  key={tab.id}
-                  onClick={() => {
-                    setOperatorTab(tab.id);
-                    window.scrollTo({ top: 0, behavior: 'smooth' });
-                  }}
-                  className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-[10px] font-black whitespace-nowrap transition-all uppercase tracking-wider ${
-                    operatorTab === tab.id 
-                      ? 'bg-brand-gold text-brand-black shadow-lg shadow-brand-gold/20' 
-                      : 'bg-white/5 text-white/60 hover:bg-white/10 border border-white/5'
-                  }`}
-                >
-                  <span>{tab.icon}</span>
-                  <span className="inline">{tab.label}</span>
-                </button>
-              ))}
-            </div>
-            
-            <div className="flex items-center gap-4 shrink-0">
-              <div className="flex items-center gap-2 bg-white/5 p-1 rounded-xl border border-white/10">
-                <button 
-                  onClick={() => setIsCalculatorOpen(!isCalculatorOpen)}
-                  className={`p-2 transition-all rounded-lg ${isCalculatorOpen ? 'text-brand-gold bg-brand-gold/10 border border-brand-gold/30 shadow-lg shadow-brand-gold/10' : 'text-white/40 hover:text-brand-gold hover:bg-white/5 border border-transparent'}`}
-                  title={t(language, 'calculator')}
-                >
-                  <Hash className="w-4 h-4" />
-                </button>
-                <div className="w-px h-4 bg-white/10"></div>
-                <button 
-                  onClick={() => setIsDarkMode(!isDarkMode)}
-                  className="p-2 text-white/40 hover:text-brand-gold transition-colors rounded-lg hover:bg-white/5"
-                  title={isDarkMode ? t(language, 'day_mode') : t(language, 'night_mode')}
-                >
-                  {isDarkMode ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
-                </button>
-                <div className="w-px h-4 bg-white/10"></div>
-                <div className="relative group">
-                  <button className="flex items-center gap-1.5 p-2 text-white/40 hover:text-brand-gold transition-colors rounded-lg hover:bg-white/5">
-                    <Globe className="w-4 h-4" />
-                    <span className="text-[10px] font-black uppercase tracking-widest">{language}</span>
-                  </button>
-                  <div className="absolute right-0 top-full mt-2 w-32 bg-brand-dark border border-white/10 rounded-xl shadow-2xl opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-50 overflow-hidden">
-                    <button onClick={() => setLanguage('uz')} className={`w-full text-left px-4 py-3 text-[10px] font-black uppercase tracking-widest transition-colors ${language === 'uz' ? 'bg-brand-gold/10 text-brand-gold' : 'text-white/60 hover:bg-white/5 hover:text-white'}`}>{t(language, 'uzbek')}</button>
-                    <button onClick={() => setLanguage('ru')} className={`w-full text-left px-4 py-3 text-[10px] font-black uppercase tracking-widest transition-colors border-t border-white/5 ${language === 'ru' ? 'bg-brand-gold/10 text-brand-gold' : 'text-white/60 hover:bg-white/5 hover:text-white'}`}>{t(language, 'russian')}</button>
-                    <button onClick={() => setLanguage('en')} className={`w-full text-left px-4 py-3 text-[10px] font-black uppercase tracking-widest transition-colors border-t border-white/5 ${language === 'en' ? 'bg-brand-gold/10 text-brand-gold' : 'text-white/60 hover:bg-white/5 hover:text-white'}`}>{t(language, 'english')}</button>
-                  </div>
-                </div>
-              </div>
-
-              <div className="flex items-center gap-3 bg-white/5 px-4 py-2 rounded-2xl border border-white/10">
-                <div className="w-9 h-9 rounded-xl bg-brand-gold/10 border border-brand-gold/30 flex items-center justify-center text-brand-gold font-black text-sm">
-                  {state.currentUser.firstName[0]}
-                </div>
-                <div className="hidden sm:block text-right">
-                  <p className="text-xs font-black text-white tracking-tight">{state.currentUser.firstName} {state.currentUser.lastName}</p>
-                  <p className="text-[9px] text-brand-gold font-black uppercase tracking-widest">{state.currentUser.role.replace('_', ' ')}</p>
-                </div>
-              </div>
-              <button 
-                onClick={handleLogout}
-                className="p-3 text-white/40 hover:text-red-500 transition-all rounded-xl hover:bg-red-500/10 border border-transparent hover:border-red-500/20"
-                title={t(language, 'logout')}
-              >
-                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" x2="9" y1="12" y2="12"/></svg>
-              </button>
-            </div>
-          </div>
-        </header>
-      )}
-
-      <main className={state.currentUser.role === Role.MANAGER ? "flex-1 overflow-y-auto p-4 sm:p-8" : "max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-6 pb-8"}>
+      <main className="flex-1 overflow-y-auto p-4 sm:p-8">
         {state.currentUser.role === Role.MANAGER ? (
           <>
             {/* Manager Navigation removed from here */}

@@ -2,8 +2,8 @@
 import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { User, AppState, CheckIn, SimSale, DailyReport } from '../types';
 import { Camera, MapPin, CheckCircle2, Send, Plus, History, Trash2, Smartphone, Upload, Image as ImageIcon, TrendingUp, Loader2, Edit3, AlertTriangle, RefreshCw, LogIn, LogOut, X, Trophy, Activity, ChevronLeft, ChevronRight, RotateCcw, BarChart3, Calendar, PlusCircle, Edit, Check, Users, ChevronDown } from 'lucide-react';
-import { getTodayStr, isDateMatch, getLatenessStatus, getUzTime } from '../utils';
-import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip } from 'recharts';
+import { getTodayStr, isDateMatch, getLatenessStatus, getUzTime, formatUzTime, formatUzDateTime } from '../utils';
+import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Cell, Legend, LabelList } from 'recharts';
 import { t, Language } from '../translations';
 
 interface OperatorPanelProps {
@@ -279,9 +279,162 @@ const OperatorPanel: React.FC<OperatorPanelProps> = ({ user, state, addCheckIn, 
     return `+${phoneNumber.slice(0, 3)} ${phoneNumber.slice(3, 5)} ${phoneNumber.slice(5, 8)} ${phoneNumber.slice(8, 10)} ${phoneNumber.slice(10, 12)}`;
   };
 
+  const last30Days = useMemo(() => {
+    const d = new Date();
+    d.setDate(d.getDate() - 30);
+    return d;
+  }, []);
+
+  const monitoringChartData = useMemo(() => {
+    const data = [];
+    if (monitoringTimeframe === 'week') {
+      const d = new Date();
+      const currentDayIndex = d.getDay();
+      const diffToMonday = (currentDayIndex === 0 ? -6 : 1 - currentDayIndex);
+      const targetMonday = new Date(d.getFullYear(), d.getMonth(), d.getDate() + diffToMonday + (monitoringWeekOffset * 7));
+      
+      const uzDays = ['Yak', 'Dush', 'Sesh', 'Chor', 'Pay', 'Juma', 'Shan'];
+      
+      for (let i = 0; i < 7; i++) {
+        const current = new Date(targetMonday);
+        current.setDate(targetMonday.getDate() + i);
+        const dateStr = `${current.getFullYear()}-${String(current.getMonth() + 1).padStart(2, '0')}-${String(current.getDate()).padStart(2, '0')}`;
+        const daySales = state.sales.filter(s => s.userId === user.id && s.date === dateStr);
+        const simcards = daySales.reduce((sum, s) => sum + s.count, 0);
+        const bonuses = daySales.reduce((sum, s) => sum + s.bonus, 0);
+        data.push({ 
+          name: uzDays[current.getDay()], 
+          simcards,
+          bonuses,
+          fullDate: dateStr
+        });
+      }
+    } else if (monitoringTimeframe === 'month') {
+      const d = new Date();
+      d.setDate(1);
+      d.setMonth(d.getMonth() + monitoringMonthOffset);
+      const year = d.getFullYear();
+      const month = d.getMonth();
+      const lastDay = new Date(year, month + 1, 0).getDate();
+      for (let i = 1; i <= lastDay; i++) {
+        const current = new Date(year, month, i);
+        const dateStr = `${current.getFullYear()}-${String(current.getMonth() + 1).padStart(2, '0')}-${String(current.getDate()).padStart(2, '0')}`;
+        const daySales = state.sales.filter(s => s.userId === user.id && s.date === dateStr);
+        const simcards = daySales.reduce((sum, s) => sum + s.count, 0);
+        const bonuses = daySales.reduce((sum, s) => sum + s.bonus, 0);
+        data.push({ name: i.toString(), simcards, bonuses, fullDate: dateStr });
+      }
+    } else if (monitoringTimeframe === 'year') {
+      for (let m = 0; m < 12; m++) {
+        const monthNum = m + 1;
+        const monthPrefix = `${monitoringYear}-${String(monthNum).padStart(2, '0')}`;
+        const monthSales = state.sales.filter(s => s.userId === user.id && s.date.startsWith(monthPrefix));
+        const simcards = monthSales.reduce((sum, s) => sum + s.count, 0);
+        const bonuses = monthSales.reduce((sum, s) => sum + s.bonus, 0);
+        const monthNames = ["Yan", "Fev", "Mar", "Apr", "May", "Iyun", "Iyul", "Avg", "Sen", "Okt", "Noy", "Dek"];
+        data.push({ name: monthNames[m], simcards, bonuses, fullDate: monthPrefix });
+      }
+    }
+    return data;
+  }, [monitoringTimeframe, monitoringWeekOffset, monitoringMonthOffset, monitoringYear, state.sales, user.id]);
+
+  const monitoringTotals = useMemo(() => {
+    const totalSimcards = monitoringChartData.reduce((sum, item) => sum + (item.simcards || 0), 0);
+    const totalBonuses = monitoringChartData.reduce((sum, item) => sum + (item.bonuses || 0), 0);
+    return { totalSimcards, totalBonuses };
+  }, [monitoringChartData]);
+
+  const monitoringTotalMonthlySales = useMemo(() => state.sales
+    .filter(s => s.userId === user.id && new Date(s.date) >= last30Days)
+    .reduce((acc, s) => acc + s.count + s.bonus, 0), [state.sales, user.id, last30Days]);
+
+  const monitoringOnTimeCheckIns = useMemo(() => state.checkIns
+    .filter(c => c.userId === user.id && new Date(c.timestamp) >= last30Days)
+    .filter(c => !getLatenessStatus(c.timestamp, user.workingHours)).length, [state.checkIns, user.id, user.workingHours, last30Days]);
+  
+  const monitoringTotalCheckIns = useMemo(() => state.checkIns
+    .filter(c => c.userId === user.id && new Date(c.timestamp) >= last30Days).length, [state.checkIns, user.id, last30Days]);
+  
+  const monitoringPunctualityRate = monitoringTotalCheckIns > 0 ? Math.round((monitoringOnTimeCheckIns / monitoringTotalCheckIns) * 100) : 100;
+
+  const monitoringPeriodTotals = useMemo(() => {
+    let filteredSales = state.sales.filter(s => s.userId === user.id);
+    
+    if (monitoringTimeframe === 'week') {
+      const d = new Date();
+      const currentDayIndex = d.getDay();
+      const diffToMonday = (currentDayIndex === 0 ? -6 : 1 - currentDayIndex);
+      const targetMonday = new Date(d.getFullYear(), d.getMonth(), d.getDate() + diffToMonday + (monitoringWeekOffset * 7));
+      targetMonday.setHours(0,0,0,0);
+      const targetSunday = new Date(targetMonday);
+      targetSunday.setDate(targetMonday.getDate() + 6);
+      targetSunday.setHours(23,59,59,999);
+      
+      filteredSales = filteredSales.filter(s => {
+        const sd = new Date(s.date);
+        return sd >= targetMonday && sd <= targetSunday;
+      });
+    } else if (monitoringTimeframe === 'month') {
+      const d = new Date();
+      d.setDate(1);
+      d.setMonth(d.getMonth() + monitoringMonthOffset);
+      const year = d.getFullYear();
+      const month = d.getMonth();
+      const monthPrefix = `${year}-${String(month + 1).padStart(2, '0')}`;
+      filteredSales = filteredSales.filter(s => s.date.startsWith(monthPrefix));
+    } else if (monitoringTimeframe === 'year') {
+      const yearPrefix = monitoringYear.toString();
+      filteredSales = filteredSales.filter(s => s.date.startsWith(yearPrefix));
+    }
+    
+    const totals: Record<string, number> = { 'Ucell': 0, 'Mobiuz': 0, 'Beeline': 0, 'Uztelecom': 0 };
+    filteredSales.forEach(s => {
+      if (totals[s.company] !== undefined) {
+        totals[s.company] += s.count + s.bonus;
+      }
+    });
+    return totals;
+  }, [state.sales, user.id, monitoringTimeframe, monitoringWeekOffset, monitoringMonthOffset, monitoringYear]);
+
+  const monitoringAllTimeTotals = useMemo(() => {
+    const totals: Record<string, number> = { 'Ucell': 0, 'Mobiuz': 0, 'Beeline': 0, 'Uztelecom': 0 };
+    state.sales.filter(s => s.userId === user.id).forEach(s => {
+      if (totals[s.company] !== undefined) {
+        totals[s.company] += s.count + s.bonus;
+      }
+    });
+    return totals;
+  }, [state.sales, user.id]);
+
+  const monitoringCurrentPeriodLabel = useMemo(() => {
+    if (monitoringTimeframe === 'week') {
+      const d = new Date();
+      const currentDayIndex = d.getDay();
+      const diffToMonday = (currentDayIndex === 0 ? -6 : 1 - currentDayIndex);
+      const targetMonday = new Date(d.getFullYear(), d.getMonth(), d.getDate() + diffToMonday + (monitoringWeekOffset * 7));
+      const targetSunday = new Date(targetMonday);
+      targetSunday.setDate(targetMonday.getDate() + 6);
+      
+      const startDay = targetMonday.getDate();
+      const endDay = targetSunday.getDate();
+      const monthNames = ["Yan", "Fev", "Mar", "Apr", "May", "Iyun", "Iyul", "Avg", "Sen", "Okt", "Noy", "Dek"];
+      
+      if (targetMonday.getMonth() !== targetSunday.getMonth()) {
+        return `${startDay} ${monthNames[targetMonday.getMonth()]} - ${endDay} ${monthNames[targetSunday.getMonth()]}`;
+      }
+      return `${startDay}-${endDay} ${monthNames[targetMonday.getMonth()]}`;
+    }
+    if (monitoringTimeframe === 'month') {
+      const d = new Date();
+      d.setDate(1);
+      d.setMonth(d.getMonth() + monitoringMonthOffset);
+      const monthNames = ["Yanvar", "Fevral", "Mart", "Aprel", "May", "Iyun", "Iyul", "Avgust", "Sentabr", "Oktabr", "Noyabr", "Dekabr"];
+      return `${monthNames[d.getMonth()]} ${d.getFullYear()}`;
+    }
+    return monitoringYear.toString();
+  }, [monitoringTimeframe, monitoringWeekOffset, monitoringMonthOffset, monitoringYear]);
+
   const renderContent = () => {
-    const last30Days = new Date();
-    last30Days.setDate(last30Days.getDate() - 30);
 
     switch (activeTab) {
       case 'rating': {
@@ -479,186 +632,18 @@ const OperatorPanel: React.FC<OperatorPanelProps> = ({ user, state, addCheckIn, 
         );
       }
       case 'monitoring': {
-        const today = getTodayStr();
-        const targetMonth = today.substring(0, 7);
-        const monthlyTarget = state.monthlyTargets.find(t => t.month === targetMonth);
-        const userSales = state.sales.filter(s => s.userId === user.id);
-        const totalTarget = monthlyTarget ? Object.values(monthlyTarget.targets).reduce((sum: number, t: any) => sum + Number(t), 0) : 0;
-        const totalSales = userSales
-          .filter(s => s.date.startsWith(targetMonth))
-          .reduce((sum, s) => sum + s.count + s.bonus, 0);
-        const percentage = Number(totalTarget) > 0 ? Math.min(100, (totalSales / Number(totalTarget)) * 100) : 0;
-
-        const getChartData = () => {
-          const data = [];
-          if (monitoringTimeframe === 'week') {
-            const d = new Date();
-            const currentDayIndex = d.getDay();
-            const diffToMonday = (currentDayIndex === 0 ? -6 : 1 - currentDayIndex);
-            const targetMonday = new Date(d.getFullYear(), d.getMonth(), d.getDate() + diffToMonday + (monitoringWeekOffset * 7));
-            
-            const uzDays = ['Yak', 'Dush', 'Sesh', 'Chor', 'Pay', 'Juma', 'Shan'];
-            
-            for (let i = 0; i < 7; i++) {
-              const current = new Date(targetMonday);
-              current.setDate(targetMonday.getDate() + i);
-              const dateStr = `${current.getFullYear()}-${String(current.getMonth() + 1).padStart(2, '0')}-${String(current.getDate()).padStart(2, '0')}`;
-              const count = state.sales.filter(s => s.userId === user.id && s.date === dateStr).reduce((sum, s) => sum + s.count + s.bonus, 0);
-              data.push({ 
-                name: uzDays[current.getDay()], 
-                sales: count,
-                fullDate: dateStr
-              });
-            }
-          } else if (monitoringTimeframe === 'month') {
-            const d = new Date();
-            d.setDate(1);
-            d.setMonth(d.getMonth() + monitoringMonthOffset);
-            const year = d.getFullYear();
-            const month = d.getMonth();
-            const lastDay = new Date(year, month + 1, 0).getDate();
-            for (let i = 1; i <= lastDay; i++) {
-              const current = new Date(year, month, i);
-              const dateStr = `${current.getFullYear()}-${String(current.getMonth() + 1).padStart(2, '0')}-${String(current.getDate()).padStart(2, '0')}`;
-              const count = state.sales.filter(s => s.userId === user.id && s.date === dateStr).reduce((sum, s) => sum + s.count + s.bonus, 0);
-              data.push({ name: i.toString(), sales: count, fullDate: dateStr });
-            }
-          } else if (monitoringTimeframe === 'year') {
-            for (let m = 0; m < 12; m++) {
-              const monthNum = m + 1;
-              const monthPrefix = `${monitoringYear}-${String(monthNum).padStart(2, '0')}`;
-              const count = state.sales.filter(s => s.userId === user.id && s.date.startsWith(monthPrefix)).reduce((sum, s) => sum + s.count + s.bonus, 0);
-              const monthNames = ["Yan", "Fev", "Mar", "Apr", "May", "Iyun", "Iyul", "Avg", "Sen", "Okt", "Noy", "Dek"];
-              data.push({ name: monthNames[m], sales: count });
-            }
-          }
-          return data;
-        };
-
-        const chartData = getChartData();
-
-        const totalMonthlySales = state.sales
-          .filter(s => s.userId === user.id && new Date(s.date) >= last30Days)
-          .reduce((acc, s) => acc + s.count + s.bonus, 0);
-
-        const onTimeCheckIns = state.checkIns
-          .filter(c => c.userId === user.id && new Date(c.timestamp) >= last30Days)
-          .filter(c => !getLatenessStatus(c.timestamp, user.workingHours)).length;
-        
-        const totalCheckIns = state.checkIns
-          .filter(c => c.userId === user.id && new Date(c.timestamp) >= last30Days).length;
-        
-        const punctualityRate = totalCheckIns > 0 ? Math.round((onTimeCheckIns / totalCheckIns) * 100) : 100;
-
-        const getPeriodSales = () => {
-          let filteredSales = state.sales.filter(s => s.userId === user.id);
-          
-          if (monitoringTimeframe === 'week') {
-            const d = new Date();
-            const currentDayIndex = d.getDay();
-            const diffToMonday = (currentDayIndex === 0 ? -6 : 1 - currentDayIndex);
-            const targetMonday = new Date(d.getFullYear(), d.getMonth(), d.getDate() + diffToMonday + (monitoringWeekOffset * 7));
-            targetMonday.setHours(0,0,0,0);
-            const targetSunday = new Date(targetMonday);
-            targetSunday.setDate(targetMonday.getDate() + 6);
-            targetSunday.setHours(23,59,59,999);
-            
-            filteredSales = filteredSales.filter(s => {
-              const sd = new Date(s.date);
-              return sd >= targetMonday && sd <= targetSunday;
-            });
-          } else if (monitoringTimeframe === 'month') {
-            const d = new Date();
-            d.setDate(1);
-            d.setMonth(d.getMonth() + monitoringMonthOffset);
-            const year = d.getFullYear();
-            const month = d.getMonth();
-            const monthPrefix = `${year}-${String(month + 1).padStart(2, '0')}`;
-            filteredSales = filteredSales.filter(s => s.date.startsWith(monthPrefix));
-          } else if (monitoringTimeframe === 'year') {
-            const yearPrefix = monitoringYear.toString();
-            filteredSales = filteredSales.filter(s => s.date.startsWith(yearPrefix));
-          }
-          
-          const totals: Record<string, number> = { 'Ucell': 0, 'Mobiuz': 0, 'Beeline': 0, 'Uztelecom': 0 };
-          filteredSales.forEach(s => {
-            if (totals[s.company] !== undefined) {
-              totals[s.company] += s.count + s.bonus;
-            }
-          });
-          return totals;
-        };
-
-        const periodTotals = getPeriodSales();
-
-        const getAllTimeSales = () => {
-          const totals: Record<string, number> = { 'Ucell': 0, 'Mobiuz': 0, 'Beeline': 0, 'Uztelecom': 0 };
-          state.sales.filter(s => s.userId === user.id).forEach(s => {
-            if (totals[s.company] !== undefined) {
-              totals[s.company] += s.count + s.bonus;
-            }
-          });
-          return totals;
-        };
-
-        const allTimeTotals = getAllTimeSales();
-
-        const currentPeriodLabel = () => {
-          if (monitoringTimeframe === 'week') {
-            const d = new Date();
-            const currentDayIndex = d.getDay();
-            const diffToMonday = (currentDayIndex === 0 ? -6 : 1 - currentDayIndex);
-            const targetMonday = new Date(d.getFullYear(), d.getMonth(), d.getDate() + diffToMonday + (monitoringWeekOffset * 7));
-            const targetSunday = new Date(targetMonday);
-            targetSunday.setDate(targetMonday.getDate() + 6);
-            
-            const startDay = targetMonday.getDate();
-            const endDay = targetSunday.getDate();
-            const monthNames = ["Yan", "Fev", "Mar", "Apr", "May", "Iyun", "Iyul", "Avg", "Sen", "Okt", "Noy", "Dek"];
-            
-            if (targetMonday.getMonth() !== targetSunday.getMonth()) {
-              return `${startDay} ${monthNames[targetMonday.getMonth()]} - ${endDay} ${monthNames[targetSunday.getMonth()]}`;
-            }
-            return `${startDay}-${endDay} ${monthNames[targetMonday.getMonth()]}`;
-          }
-          if (monitoringTimeframe === 'month') {
-            const d = new Date();
-            d.setDate(1);
-            d.setMonth(d.getMonth() + monitoringMonthOffset);
-            const monthNames = ["Yanvar", "Fevral", "Mart", "Aprel", "May", "Iyun", "Iyul", "Avgust", "Sentabr", "Oktabr", "Noyabr", "Dekabr"];
-            return `${monthNames[d.getMonth()]} ${d.getFullYear()}`;
-          }
-          return monitoringYear.toString();
-        };
-
         return (
           <div className="space-y-10 animate-in fade-in slide-in-from-bottom-5 duration-700">
-            <div className="grid grid-cols-2 lg:grid-cols-4 gap-6">
-              {[
-                { name: 'Ucell', color: 'bg-[#9b51e0]', textColor: 'text-[#9b51e0]' },
-                { name: 'Uztelecom', color: 'bg-[#009ee0]', textColor: 'text-[#009ee0]' },
-                { name: 'Mobiuz', color: 'bg-[#eb1c24]', textColor: 'text-[#eb1c24]' },
-                { name: 'Beeline', color: 'bg-[#fdb913]', textColor: 'text-[#fdb913]' }
-              ].map(company => (
-                <div key={company.name} className="bg-brand-dark p-6 rounded-[2.5rem] shadow-xl flex items-center gap-5 hover:scale-105 transition-transform duration-300 border border-white/10">
-                  <div className={`w-12 h-12 ${company.color} rounded-2xl shadow-lg flex items-center justify-center text-white keep-white`}>
-                    <Smartphone className="w-6 h-6" />
-                  </div>
-                  <div>
-                    <p className="text-[9px] font-black text-white/30 uppercase tracking-widest mb-0.5">{company.name}</p>
-                    <p className={`text-2xl font-black ${company.textColor}`}>{allTimeTotals[company.name]}</p>
-                  </div>
-                </div>
-              ))}
-            </div>
-
             <div className="bg-brand-dark p-10 rounded-[3rem] shadow-xl border border-white/10">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-10 gap-6">
                 <div className="flex flex-col gap-2">
                   <h2 className="text-2xl font-black text-white flex items-center gap-3"><Activity className="w-8 h-8 text-brand-gold" /> Savdo Dinamikasi</h2>
-                  <div className="flex flex-wrap gap-3 pl-11">
+                </div>
+                
+                <div className="flex flex-wrap items-center gap-4">
+                  <div className="flex flex-wrap gap-3 mr-4">
                     {['Ucell', 'Uztelecom', 'Mobiuz', 'Beeline'].map(company => {
-                      const count = periodTotals[company] || 0;
+                      const count = monitoringPeriodTotals[company] || 0;
                       const styles: any = {
                         'Ucell': 'text-[#9b51e0] bg-[#9b51e0]/10 border-[#9b51e0]/20',
                         'Uztelecom': 'text-[#009ee0] bg-[#009ee0]/10 border-[#009ee0]/20',
@@ -672,9 +657,6 @@ const OperatorPanel: React.FC<OperatorPanelProps> = ({ user, state, addCheckIn, 
                       );
                     })}
                   </div>
-                </div>
-                
-                <div className="flex flex-wrap items-center gap-4">
                   <div className="flex p-1 bg-brand-black rounded-xl border border-white/10">
                     <button 
                       onClick={() => setMonitoringTimeframe('week')}
@@ -708,7 +690,7 @@ const OperatorPanel: React.FC<OperatorPanelProps> = ({ user, state, addCheckIn, 
                       <ChevronLeft className="w-4 h-4" />
                     </button>
                     <span className="text-[10px] font-black text-brand-gold px-3 uppercase tracking-widest min-w-[100px] text-center">
-                      {currentPeriodLabel()}
+                      {monitoringCurrentPeriodLabel}
                     </span>
                     <button 
                       onClick={() => {
@@ -731,11 +713,11 @@ const OperatorPanel: React.FC<OperatorPanelProps> = ({ user, state, addCheckIn, 
                   )}
                 </div>
               </div>
-              <div className="h-[300px] w-full chart-wrapper">
+              <div className="h-[350px] w-full chart-wrapper">
                 <ResponsiveContainer width="100%" height="100%" style={{ outline: 'none' }}>
                   <BarChart 
-                    data={chartData} 
-                    margin={{ top: 10, right: 10, left: 0, bottom: 0 }}
+                    data={monitoringChartData} 
+                    margin={{ top: 30, right: 10, left: 0, bottom: 0 }}
                     style={{ outline: 'none' }}
                     onClick={(e: any) => {
                       if (e && e.activePayload && e.activePayload.length > 0) {
@@ -744,14 +726,14 @@ const OperatorPanel: React.FC<OperatorPanelProps> = ({ user, state, addCheckIn, 
                           setSelectedDay(payload.fullDate);
                         }
                       } else if (e && e.activeTooltipIndex !== undefined) {
-                        const payload = chartData[e.activeTooltipIndex];
+                        const payload = monitoringChartData[e.activeTooltipIndex];
                         if (payload && payload.fullDate) {
                           setSelectedDay(payload.fullDate);
                         }
                       }
                     }}
                   >
-                    <CartesianGrid strokeDasharray="4 4" vertical={false} stroke="#f1f5f9" />
+                    <CartesianGrid strokeDasharray="4 4" vertical={false} stroke="#f1f5f9" opacity={0.1} />
                     <XAxis 
                       dataKey="name" 
                       axisLine={false} 
@@ -759,21 +741,94 @@ const OperatorPanel: React.FC<OperatorPanelProps> = ({ user, state, addCheckIn, 
                       tick={{ fontSize: 11, fontWeight: 700, fill: '#94a3b8' }}
                       dy={10}
                     />
-                    <YAxis 
-                      hide
-                      axisLine={false} 
-                      tickLine={false} 
-                    />
+                    <YAxis hide axisLine={false} tickLine={false} />
                     <Tooltip 
-                      contentStyle={{ borderRadius: '16px', border: 'none', boxShadow: '0 25px 50px -12px rgb(0 0 0 / 0.15)', fontWeight: 800 }}
-                      cursor={{ fill: '#f1f5f9', radius: 4 }}
+                      content={({ active, payload, label }) => {
+                        if (active && payload && payload.length) {
+                          return (
+                            <div className="bg-[#1A1A1A] p-4 rounded-2xl shadow-2xl border border-white/10">
+                              <p className="text-white font-bold mb-2 text-sm">{label}</p>
+                              <div className="flex flex-col gap-1">
+                                {payload.filter((p: any) => p.dataKey === 'simcards').map((p: any) => (
+                                  <div key={p.dataKey} className="flex items-center justify-between gap-4 text-xs font-bold text-brand-gold">
+                                    <div className="flex items-center gap-2">
+                                      <div className="w-2 h-2 rounded-full bg-brand-gold"></div>
+                                      <span>Simkartalar:</span>
+                                    </div>
+                                    <span>{p.value}</span>
+                                  </div>
+                                ))}
+                                {payload.filter((p: any) => p.dataKey === 'bonuses').map((p: any) => (
+                                  <div key={p.dataKey} className="flex items-center justify-between gap-4 text-xs font-bold text-[#10B981]">
+                                    <div className="flex items-center gap-2">
+                                      <div className="w-2 h-2 rounded-full bg-[#10B981]"></div>
+                                      <span>Bonuslar:</span>
+                                    </div>
+                                    <span>{p.value}</span>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          );
+                        }
+                        return null;
+                      }}
+                      cursor={{ fill: 'rgba(255,255,255,0.05)', radius: 4 }}
+                    />
+                    <Legend 
+                      verticalAlign="top" 
+                      height={60}
+                      content={() => (
+                        <div className="flex flex-col items-center justify-center gap-4 mb-8">
+                          <div className="flex items-center gap-6">
+                            <div className="flex items-center gap-2">
+                              <div className="w-2 h-2 rounded-full bg-brand-gold"></div>
+                              <span className="text-xs font-bold text-white/60 uppercase tracking-wider">Simkartalar: {monitoringTotals.totalSimcards}</span>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <div className="w-2 h-2 rounded-full bg-[#10B981]"></div>
+                              <span className="text-xs font-bold text-white/60 uppercase tracking-wider">Bonuslar: {monitoringTotals.totalBonuses}</span>
+                            </div>
+                          </div>
+                        </div>
+                      )}
                     />
                     <Bar 
-                      dataKey="sales" 
+                      name="Simkartalar"
+                      dataKey="simcards" 
                       fill="var(--theme-gold)" 
-                      radius={[12, 12, 0, 0]}
-                      barSize={monitoringTimeframe === 'week' ? 80 : undefined}
-                    />
+                      radius={[4, 4, 0, 0]}
+                      barSize={monitoringTimeframe === 'week' ? 20 : undefined}
+                      onClick={(data, index, e) => {
+                        if (e && e.stopPropagation) e.stopPropagation();
+                        if (data && data.fullDate) {
+                          setSelectedDay(prev => prev === data.fullDate ? null : data.fullDate);
+                        }
+                      }}
+                    >
+                      {monitoringChartData.map((entry, index) => (
+                        <Cell key={`cell-${index}`} fill={entry.fullDate === selectedDay ? '#fff' : 'var(--theme-gold)'} />
+                      ))}
+                      <LabelList dataKey="simcards" position="top" fill="var(--theme-gold)" fontSize={10} fontWeight={900} formatter={(val: number) => val > 0 ? val : ''} />
+                    </Bar>
+                    <Bar 
+                      name="Bonuslar"
+                      dataKey="bonuses" 
+                      fill="#10B981" 
+                      radius={[4, 4, 0, 0]}
+                      barSize={monitoringTimeframe === 'week' ? 20 : undefined}
+                      onClick={(data, index, e) => {
+                        if (e && e.stopPropagation) e.stopPropagation();
+                        if (data && data.fullDate) {
+                          setSelectedDay(prev => prev === data.fullDate ? null : data.fullDate);
+                        }
+                      }}
+                    >
+                      {monitoringChartData.map((entry, index) => (
+                        <Cell key={`cell-bonus-${index}`} fill={entry.fullDate === selectedDay ? '#a7f3d0' : '#10B981'} />
+                      ))}
+                      <LabelList dataKey="bonuses" position="top" fill="#10B981" fontSize={10} fontWeight={900} formatter={(val: number) => val > 0 ? val : ''} />
+                    </Bar>
                   </BarChart>
                 </ResponsiveContainer>
               </div>
@@ -865,7 +920,7 @@ const OperatorPanel: React.FC<OperatorPanelProps> = ({ user, state, addCheckIn, 
                               </span>
                             </td>
                             <td className="px-8 py-5 text-right text-[10px] font-black text-gray-400 uppercase tracking-widest">
-                              {new Date(sale.timestamp).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit', hour12: true})}
+                              {formatUzTime(sale.timestamp)}
                             </td>
                           </tr>
                         ));
@@ -1170,7 +1225,7 @@ const OperatorPanel: React.FC<OperatorPanelProps> = ({ user, state, addCheckIn, 
                             {m.senderName}
                             {m.recipientId === 'all' && <span className="text-[8px] bg-brand-gold/10 text-brand-gold px-2 py-0.5 rounded-full ml-2 uppercase tracking-widest">Barchaga</span>}
                           </h4>
-                          <p className="text-[10px] text-white/30 font-bold">{new Date(m.timestamp).toLocaleString()}</p>
+                          <p className="text-[10px] text-white/30 font-bold">{formatUzDateTime(m.timestamp)}</p>
                         </div>
                       </div>
                       {!m.isRead && m.senderId !== user.id && <span className="px-2 py-1 bg-brand-gold text-brand-black text-[8px] font-black rounded-md uppercase tracking-widest">Yangi</span>}
@@ -1418,18 +1473,18 @@ const OperatorPanel: React.FC<OperatorPanelProps> = ({ user, state, addCheckIn, 
         const checkInForToday = state.checkIns.find(c => c.userId === user.id && c.date === today);
 
         return (
-          <div className="p-4 sm:p-6 lg:p-8 font-sans bg-brand-black min-h-screen flex flex-col">
-            <div className="max-w-7xl mx-auto w-full flex-1 flex flex-col">
+          <div className="space-y-6 animate-in fade-in duration-500">
+            <div className="w-full">
 
               {/* Header */}
-              <div className="flex justify-end items-center mb-6">
+              <div className="flex justify-start items-center mb-6">
                 {checkInForToday && !checkInForToday.checkOutTime && (
                   <button 
                     onClick={() => handleCheckOut()}
-                    className="px-6 py-3 bg-red-500 !text-white font-bold rounded-lg shadow-md hover:bg-red-600 transition-all duration-200 flex items-center gap-2"
+                    className="px-6 py-3 bg-red-500 text-white keep-white font-bold rounded-lg shadow-md hover:bg-red-600 transition-all duration-200 flex items-center gap-2"
                   >
-                    <LogOut className="w-5 h-5 !text-white" />
-                    <span className="!text-white">Ishni yakunlash</span>
+                    <LogOut className="w-5 h-5 text-white keep-white" />
+                    <span className="text-white keep-white">Ishni yakunlash</span>
                   </button>
                 )}
               </div>
@@ -1441,81 +1496,82 @@ const OperatorPanel: React.FC<OperatorPanelProps> = ({ user, state, addCheckIn, 
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-10 gap-6">
                   <div className="flex items-center gap-4">
                     <h2 className="text-2xl font-black text-white flex items-center gap-3"><Smartphone className="w-8 h-8 text-brand-gold" /> {t(language, 'monthly_plan_sales')}</h2>
-                    <div className="relative">
-                      <div 
-                        onClick={() => setShowMonthPicker(!showMonthPicker)}
-                        className="flex items-center gap-3 bg-brand-black pl-3 pr-6 py-2 rounded-2xl border border-white/10 shadow-sm hover:shadow-md hover:border-brand-gold/30 transition-all cursor-pointer"
-                      >
-                        <div className="w-10 h-10 rounded-xl bg-brand-gold/10 flex items-center justify-center text-brand-gold group-hover:scale-110 transition-transform">
-                          <Calendar className="w-5 h-5" />
-                        </div>
-                        <span className="text-sm font-black text-white capitalize leading-none">
-                          {(() => {
-                            if (!selectedTargetMonth) return t(language, 'select_month');
-                            const [y, m] = selectedTargetMonth.split('-');
-                            const monthNames = ['Yanvar', 'Fevral', 'Mart', 'Aprel', 'May', 'Iyun', 'Iyul', 'Avgust', 'Sentabr', 'Oktabr', 'Noyabr', 'Dekabr'];
-                            return `${monthNames[parseInt(m) - 1]} ${y}`;
-                          })()}
-                        </span>
+                  </div>
+                  
+                  <div className="relative">
+                    <div 
+                      onClick={() => setShowMonthPicker(!showMonthPicker)}
+                      className="flex items-center gap-3 bg-brand-black pl-3 pr-6 py-2 rounded-2xl border border-white/10 shadow-sm hover:shadow-md hover:border-brand-gold/30 transition-all cursor-pointer"
+                    >
+                      <div className="w-10 h-10 rounded-xl bg-brand-gold/10 flex items-center justify-center text-brand-gold group-hover:scale-110 transition-transform">
+                        <Calendar className="w-5 h-5" />
                       </div>
-
-                      {showMonthPicker && (
-                        <>
-                          <div className="fixed inset-0 z-40" onClick={() => setShowMonthPicker(false)}></div>
-                          <div className="absolute top-full left-0 mt-4 bg-brand-dark rounded-3xl shadow-2xl border border-white/10 p-6 z-50 w-80 animate-in fade-in zoom-in-95 duration-200">
-                            <div className="flex items-center justify-between mb-6">
-                              <button 
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  const [y, m] = (selectedTargetMonth || new Date().toISOString().slice(0, 7)).split('-');
-                                  setSelectedTargetMonth(`${parseInt(y) - 1}-${m}`);
-                                }}
-                                className="p-2 hover:bg-white/5 rounded-xl transition-colors text-white/60"
-                              >
-                                <ChevronLeft className="w-5 h-5" />
-                              </button>
-                              <span className="text-lg font-black text-white">
-                                {selectedTargetMonth.split('-')[0]}
-                              </span>
-                              <button 
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  const [y, m] = (selectedTargetMonth || new Date().toISOString().slice(0, 7)).split('-');
-                                  setSelectedTargetMonth(`${parseInt(y) + 1}-${m}`);
-                                }}
-                                className="p-2 hover:bg-white/5 rounded-xl transition-colors text-white/60"
-                              >
-                                <ChevronRight className="w-5 h-5" />
-                              </button>
-                            </div>
-                            <div className="grid grid-cols-3 gap-3">
-                              {['Yan', 'Fev', 'Mar', 'Apr', 'May', 'Iyun', 'Iyul', 'Avg', 'Sen', 'Okt', 'Noy', 'Dek'].map((mName, i) => {
-                                const monthNum = String(i + 1).padStart(2, '0');
-                                const currentYear = (selectedTargetMonth || new Date().toISOString().slice(0, 7)).split('-')[0];
-                                const isSelected = selectedTargetMonth === `${currentYear}-${monthNum}`;
-                                
-                                return (
-                                  <button
-                                    key={i}
-                                    onClick={() => {
-                                      setSelectedTargetMonth(`${currentYear}-${monthNum}`);
-                                      setShowMonthPicker(false);
-                                    }}
-                                    className={`py-3 rounded-xl text-sm font-bold transition-all ${
-                                      isSelected 
-                                        ? 'bg-brand-gold text-brand-black shadow-lg shadow-brand-gold/20 scale-105' 
-                                        : 'bg-white/5 text-white/60 hover:bg-brand-gold/10 hover:text-brand-gold'
-                                    }`}
-                                  >
-                                    {mName}
-                                  </button>
-                                );
-                              })}
-                            </div>
-                          </div>
-                        </>
-                      )}
+                      <span className="text-sm font-black text-white capitalize leading-none">
+                        {(() => {
+                          if (!selectedTargetMonth) return t(language, 'select_month');
+                          const [y, m] = selectedTargetMonth.split('-');
+                          const monthNames = ['Yanvar', 'Fevral', 'Mart', 'Aprel', 'May', 'Iyun', 'Iyul', 'Avgust', 'Sentabr', 'Oktabr', 'Noyabr', 'Dekabr'];
+                          return `${monthNames[parseInt(m) - 1]} ${y}`;
+                        })()}
+                      </span>
                     </div>
+
+                    {showMonthPicker && (
+                      <>
+                        <div className="fixed inset-0 z-40" onClick={() => setShowMonthPicker(false)}></div>
+                        <div className="absolute top-full right-0 mt-4 bg-brand-dark rounded-3xl shadow-2xl border border-white/10 p-6 z-50 w-80 animate-in fade-in zoom-in-95 duration-200">
+                          <div className="flex items-center justify-between mb-6">
+                            <button 
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                const [y, m] = (selectedTargetMonth || new Date().toISOString().slice(0, 7)).split('-');
+                                setSelectedTargetMonth(`${parseInt(y) - 1}-${m}`);
+                              }}
+                              className="p-2 hover:bg-white/5 rounded-xl transition-colors text-white/60"
+                            >
+                              <ChevronLeft className="w-5 h-5" />
+                            </button>
+                            <span className="text-lg font-black text-white">
+                              {selectedTargetMonth.split('-')[0]}
+                            </span>
+                            <button 
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                const [y, m] = (selectedTargetMonth || new Date().toISOString().slice(0, 7)).split('-');
+                                setSelectedTargetMonth(`${parseInt(y) + 1}-${m}`);
+                              }}
+                              className="p-2 hover:bg-white/5 rounded-xl transition-colors text-white/60"
+                            >
+                              <ChevronRight className="w-5 h-5" />
+                            </button>
+                          </div>
+                          <div className="grid grid-cols-3 gap-3">
+                            {['Yan', 'Fev', 'Mar', 'Apr', 'May', 'Iyun', 'Iyul', 'Avg', 'Sen', 'Okt', 'Noy', 'Dek'].map((mName, i) => {
+                              const monthNum = String(i + 1).padStart(2, '0');
+                              const currentYear = (selectedTargetMonth || new Date().toISOString().slice(0, 7)).split('-')[0];
+                              const isSelected = selectedTargetMonth === `${currentYear}-${monthNum}`;
+                              
+                              return (
+                                <button
+                                  key={i}
+                                  onClick={() => {
+                                    setSelectedTargetMonth(`${currentYear}-${monthNum}`);
+                                    setShowMonthPicker(false);
+                                  }}
+                                  className={`py-3 rounded-xl text-sm font-bold transition-all ${
+                                    isSelected 
+                                      ? 'bg-brand-gold text-brand-black shadow-lg shadow-brand-gold/20 scale-105' 
+                                      : 'bg-white/5 text-white/60 hover:bg-brand-gold/10 hover:text-brand-gold'
+                                  }`}
+                                >
+                                  {mName}
+                                </button>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      </>
+                    )}
                   </div>
                 </div>
 
@@ -1602,6 +1658,10 @@ const OperatorPanel: React.FC<OperatorPanelProps> = ({ user, state, addCheckIn, 
 
                       if (effectiveInventory < (count + bonus)) {
                         return alert(`${newSale.company} simkartalari omborda yetarli emas! Mavjud: ${effectiveInventory} dona. (Sotuv: ${count} + Bonus: ${bonus} = ${count + bonus})`);
+                      }
+
+                      if (bonus > count) {
+                        return alert("Bonuslar soni sotilgan simkartalar sonidan ko'p bo'lishi mumkin emas!");
                       }
 
                       if (editingSaleId) {
@@ -1727,7 +1787,26 @@ const OperatorPanel: React.FC<OperatorPanelProps> = ({ user, state, addCheckIn, 
                         />
                         <p className="text-[9px] font-bold text-white/30 pl-2 mt-1">Mavjud: {formatLargeNumber(user.inventory?.[newSale.company] || 0)} dona</p>
                       </div>
-                      <div className="space-y-1.5"><label className="text-[10px] font-black text-white/40 uppercase tracking-widest pl-2">Bonus (ta)</label><input type="number" min="0" step="1" placeholder="0 ta" className="w-full p-4 border border-white/10 rounded-2xl bg-brand-dark text-sm font-bold outline-none focus:border-brand-gold transition text-white" value={newSale.bonus} onChange={e => { const val = e.target.value; if (val.length <= 7) setNewSale({...newSale, bonus: val}); }} /></div>
+                      <div className="space-y-1.5">
+                        <label className="text-[10px] font-black text-white/40 uppercase tracking-widest pl-2">Bonus (ta)</label>
+                        <input 
+                          type="number" 
+                          min="0" 
+                          step="1" 
+                          placeholder="0 ta" 
+                          className={`w-full p-4 border rounded-2xl bg-brand-dark text-sm font-bold outline-none transition text-white ${Number(newSale.bonus) > Number(newSale.count) ? 'border-red-500/50 focus:border-red-500' : 'border-white/10 focus:border-brand-gold'}`} 
+                          value={newSale.bonus} 
+                          onChange={e => { 
+                            const val = e.target.value; 
+                            if (val.length <= 7) setNewSale({...newSale, bonus: val}); 
+                          }} 
+                        />
+                        {Number(newSale.bonus) > Number(newSale.count) && (
+                          <p className="text-[9px] font-bold text-red-500 pl-2 mt-1 flex items-center gap-1">
+                            <AlertTriangle className="w-3 h-3" /> Bonus simkarta sonidan ko'p bo'lishi mumkin emas
+                          </p>
+                        )}
+                      </div>
                     </div>
                     <div className="flex gap-4 pt-2">
                       <button 
@@ -1736,6 +1815,7 @@ const OperatorPanel: React.FC<OperatorPanelProps> = ({ user, state, addCheckIn, 
                           const count = Number(newSale.count);
                           const bonus = Number(newSale.bonus);
                           if (count <= 0) return true;
+                          if (bonus > count) return true;
                           let effectiveInventory = user.inventory?.[newSale.company] || 0;
                           if (editingSaleId) {
                             const originalSale = state.sales.find(s => s.id === editingSaleId);
@@ -1792,7 +1872,7 @@ const OperatorPanel: React.FC<OperatorPanelProps> = ({ user, state, addCheckIn, 
                           <td className="px-8 py-5 text-center font-black text-lg text-indigo-500">{sale.count + sale.bonus}</td>
                           <td className="px-8 py-5 text-right">
                             <div className="flex items-center justify-end gap-3">
-                              <span className="text-[10px] font-bold text-white/30">{new Date(sale.timestamp).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}</span>
+                              <span className="text-[10px] font-bold text-white/30">{formatUzTime(sale.timestamp)}</span>
                               <button 
                                 onClick={() => {
                                   setEditingSaleId(sale.id);
@@ -1832,20 +1912,22 @@ const OperatorPanel: React.FC<OperatorPanelProps> = ({ user, state, addCheckIn, 
                 
                 <div className="space-y-5">
                   {userCheckIn ? (() => {
-                    const checkTime = new Date(userCheckIn.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true }).toUpperCase();
-                    const isLate = !!lateness;
-                    const boxStyle = isLate ? 'bg-red-600 dark:bg-red-500/10 border-red-500/20 shadow-red-500/10' : 'bg-green-600 dark:bg-green-500/10 border-green-500/20 shadow-green-500/10';
+                    const checkTime = formatUzTime(userCheckIn.timestamp);
+                    const isLate = !!lateness?.isLate;
+                    const { start } = getWorkingTimes();
+                    const boxStyle = isLate ? 'bg-red-600 dark:bg-red-500/10 border-red-500/20' : 'bg-green-600 dark:bg-green-500/10 border-green-500/20';
 
                     return (
-                      <div className={`p-6 rounded-[2rem] border-2 transition-all flex flex-col gap-3 shadow-lg ${boxStyle}`}>
+                      <div className={`p-6 rounded-[2rem] border-2 transition-all flex flex-col gap-3 ${boxStyle}`}>
                         <div className="flex items-center justify-between">
                           <div className="flex items-center gap-4">
                             <div className={`p-4 rounded-2xl shadow-md ${isLate ? 'bg-white text-red-600 dark:bg-red-600 dark:text-white' : 'bg-white text-green-600 dark:bg-green-600 dark:text-white'}`}><LogIn className="w-6 h-6" /></div>
                             <div>
                               <div className="flex items-center gap-2 mb-0.5">
-                                <p className={`text-[9px] font-black uppercase tracking-widest ${isLate ? '!text-white dark:!text-red-500' : '!text-white dark:!text-green-500'}`}>Kelish</p>
+                                <p className={`text-[9px] font-black uppercase tracking-widest ${isLate ? '!text-white keep-white dark:!text-red-500' : '!text-white keep-white dark:!text-green-500'}`}>Kelish</p>
+                                <span className="text-[8px] font-bold opacity-60 text-white keep-white">({start})</span>
                                 {isLate && (
-                                  <div className="bg-red-600 text-white text-[8px] font-black px-2 py-0.5 rounded-full uppercase tracking-tighter animate-pulse shadow-md ring-2 ring-white">LATE</div>
+                                  <div className="bg-red-600 text-white keep-white text-[8px] font-black px-2 py-0.5 rounded-full uppercase tracking-tighter animate-pulse shadow-md ring-2 ring-white">LATE</div>
                                 )}
                               </div>
                               {editingTime?.type === 'checkIn' ? (
@@ -1873,7 +1955,7 @@ const OperatorPanel: React.FC<OperatorPanelProps> = ({ user, state, addCheckIn, 
                                   <button onClick={() => setEditingTime(null)} className="p-2 bg-white/10 text-white rounded-lg hover:bg-white/20 transition shadow-sm border border-white/10"><X className="w-4 h-4" /></button>
                                 </div>
                               ) : (
-                                <p className={`text-2xl font-black tracking-tight ${isLate ? '!text-white dark:!text-red-500' : '!text-white'}`}>{checkTime}</p>
+                                <p className={`text-2xl font-black tracking-tight ${isLate ? '!text-white keep-white dark:!text-red-500' : '!text-white keep-white'}`}>{checkTime}</p>
                               )}
                             </div>
                           </div>
@@ -1881,7 +1963,7 @@ const OperatorPanel: React.FC<OperatorPanelProps> = ({ user, state, addCheckIn, 
                           {hasReported && <button onClick={() => setIsEditingCheckIn(true)} className="p-3 bg-white text-green-600 dark:bg-brand-black dark:text-brand-gold rounded-xl shadow-md border border-white/20 dark:border-brand-gold/20 active:scale-90 transition-all hover:bg-white/90 dark:hover:bg-brand-gold/10"><Edit3 className="w-4 h-4" /></button>}
                         </div>
                         {isLate && editingTime?.type !== 'checkIn' && (
-                          <div className="mt-1 flex items-center gap-2 bg-red-600 text-white p-3 rounded-2xl shadow-xl shadow-red-200 text-[10px] font-black uppercase animate-in slide-in-from-top-2 duration-300">
+                          <div className="mt-1 flex items-center gap-2 bg-red-600 text-white keep-white p-3 rounded-2xl text-[10px] font-black uppercase animate-in slide-in-from-top-2 duration-300">
                             <AlertTriangle className="w-4 h-4" />
                             <span>{lateness?.durationStr} kechikish (LATE)</span>
                           </div>
@@ -1894,12 +1976,13 @@ const OperatorPanel: React.FC<OperatorPanelProps> = ({ user, state, addCheckIn, 
                     </div>
                   )}
                   
-                  <div className={`p-6 rounded-[2rem] border shadow-sm flex items-center justify-between bg-blue-600 dark:bg-blue-500/10 border-blue-500/20`}>
+                  <div className={`p-6 rounded-[2rem] border flex items-center justify-between bg-blue-600 dark:bg-blue-500/10 border-blue-500/20`}>
                     <div className="flex items-center gap-4">
                       <div className={`p-3.5 rounded-xl shadow-md bg-white text-blue-600 dark:bg-blue-600 dark:text-white`}><LogOut className="w-6 h-6" /></div>
                       <div>
                         <div className="flex items-center gap-2 mb-1">
-                          <p className="text-[9px] font-black !text-white dark:!text-white/30 uppercase tracking-widest">Ketish</p>
+                          <p className="text-[9px] font-black !text-white keep-white dark:!text-white/30 uppercase tracking-widest">Ketish</p>
+                          <span className="text-[8px] font-bold opacity-60 text-white keep-white">({getWorkingTimes().end})</span>
                         </div>
                         {editingTime?.type === 'checkOut' ? (
                           <div className="flex items-center gap-2 mt-1">
@@ -1926,7 +2009,7 @@ const OperatorPanel: React.FC<OperatorPanelProps> = ({ user, state, addCheckIn, 
                             <button onClick={() => setEditingTime(null)} className="p-2 bg-white/10 text-white rounded-lg hover:bg-white/20 transition shadow-sm border border-white/10"><X className="w-4 h-4" /></button>
                           </div>
                         ) : (
-                          <p className={`text-2xl font-black ${hasReported ? '!text-white' : '!text-white/50 dark:!text-white/30'}`}>{hasReported ? new Date(currentReport!.timestamp).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit', hour12: true}).toUpperCase() : 'Hali ketmagan'}</p>
+                          <p className={`text-2xl font-black ${hasReported ? '!text-white keep-white' : '!text-white/50 keep-white dark:!text-white/30'}`}>{hasReported ? formatUzTime(currentReport!.timestamp) : 'Hali ketmagan'}</p>
                         )}
                       </div>
                     </div>
@@ -1937,10 +2020,10 @@ const OperatorPanel: React.FC<OperatorPanelProps> = ({ user, state, addCheckIn, 
                     )}
                   </div>
 
-                  <div className="p-8 bg-brand-gold rounded-[2.5rem] !text-white shadow-xl shadow-brand-gold/20 relative overflow-hidden group">
+                  <div className="p-8 bg-brand-gold rounded-[2.5rem] !text-white keep-white relative overflow-hidden group">
                     <div className="absolute -right-4 -top-4 w-20 h-20 bg-brand-black/10 rounded-full group-hover:scale-150 transition-transform duration-700"></div>
-                    <p className="text-[9px] font-black !text-white/80 uppercase tracking-widest mb-1 relative z-10">{t(language, 'today_total_sales')}</p>
-                    <p className="text-4xl font-black tracking-tight relative z-10">{todaySales.reduce((acc, s) => acc + s.count + s.bonus, 0)} <span className="text-xs opacity-60 capitalize">{t(language, 'pcs')}</span></p>
+                    <p className="text-[9px] font-black !text-white/80 keep-white uppercase tracking-widest mb-1 relative z-10">{t(language, 'today_total_sales')}</p>
+                    <p className="text-4xl font-black tracking-tight relative z-10 text-white keep-white">{todaySales.reduce((acc, s) => acc + s.count + s.bonus, 0)} <span className="text-xs opacity-60 capitalize text-white keep-white">{t(language, 'pcs')}</span></p>
                   </div>
                 </div>
               </div>
