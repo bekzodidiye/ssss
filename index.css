@@ -153,3 +153,21 @@ html:not(.dark) .theme-blue-box .border-white\/5 { border-color: rgba(17, 24, 39
 
 html:not(.dark) .theme-blue-box .bg-brand-black { background-color: #f9fafb !important; }
 html:not(.dark) .theme-blue-box .bg-brand-dark { background-color: #ffffff !important; }
+
+/* Flip Card Utilities */
+.perspective-1000 {
+  perspective: 1000px;
+  -webkit-perspective: 1000px;
+}
+.transform-style-3d {
+  transform-style: preserve-3d;
+  -webkit-transform-style: preserve-3d;
+}
+.backface-hidden {
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+}
+.rotate-y-180 {
+  transform: rotateY(180deg);
+  -webkit-transform: rotateY(180deg);
+}

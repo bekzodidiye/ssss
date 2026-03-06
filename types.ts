@@ -5,6 +5,11 @@ export enum Role {
   DUTY_OPERATOR = 'navbatchi_operator'
 }
 
+export interface LeagueHistory {
+  league: 'gold' | 'silver' | 'bronze';
+  date: string; // ISO date string
+}
+
 export interface User {
   id: string;
   firstName: string;
@@ -17,10 +22,24 @@ export interface User {
   workingHours?: string;
   photo?: string;
   inventory?: Record<string, number>;
+  department?: string;
+  league?: 'gold' | 'silver' | 'bronze';
+  leagueHistory?: LeagueHistory[];
+  achievements?: Achievement[];
+  workLocation?: { lat: number; lng: number; address?: string };
+  workRadius?: number;
+  workType?: 'office' | 'mobile' | 'desk';
+}
+
+export interface Achievement {
+  id: string;
+  type: 'gold' | 'silver' | 'bronze';
+  title: string;
+  reason: string;
+  date: string;
 }
 
 export interface CheckIn {
-  id?: string;
   userId: string;
   timestamp: string;
   location: { lat: number; lng: number };
@@ -73,6 +92,11 @@ export interface MonthlyTarget {
   mobileOfficeCounts?: Record<string, number>; // company -> mobile office count
 }
 
+export interface RatingThresholds {
+  overall: { bronze: number; silver: number; gold: number };
+  companies: Record<string, { bronze: number; silver: number; gold: number }>;
+}
+
 export interface AppState {
   currentUser: User | null;
   users: User[];
@@ -84,4 +108,6 @@ export interface AppState {
   rules: Rule[];
   monthlyTargets: MonthlyTarget[];
   tariffs: Record<string, string[]>;
+  ratingThresholds?: RatingThresholds;
+  processedMonthsForAchievements?: string[];
 }

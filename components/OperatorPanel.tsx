@@ -1,10 +1,69 @@
 
 import React, { useState, useRef, useEffect, useMemo } from 'react';
-import { User, AppState, CheckIn, SimSale, DailyReport } from '../types';
+import { User, AppState, CheckIn, SimSale, DailyReport, Achievement } from '../types';
 import { Camera, MapPin, CheckCircle2, Send, Plus, History, Trash2, Smartphone, Upload, Image as ImageIcon, TrendingUp, Loader2, Edit3, AlertTriangle, RefreshCw, LogIn, LogOut, X, Trophy, Activity, ChevronLeft, ChevronRight, RotateCcw, BarChart3, Calendar, PlusCircle, Edit, Check, Users, ChevronDown } from 'lucide-react';
-import { getTodayStr, isDateMatch, getLatenessStatus, getUzTime, formatUzTime, formatUzDateTime } from '../utils';
+import { getTodayStr, isDateMatch, getLatenessStatus, getUzTime, formatUzTime, formatUzDateTime, calculateDistance } from '../utils';
 import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Cell, Legend, LabelList } from 'recharts';
-import { t, Language } from '../translations';
+import { t, Language, translations } from '../translations';
+
+const AchievementCard: React.FC<{ achievement: Achievement }> = ({ achievement }) => {
+  const [isFlipped, setIsFlipped] = useState(false);
+
+  const getIcon = (type: string) => {
+    switch (type) {
+      case 'gold': return <Trophy className="w-10 h-10 text-yellow-400 drop-shadow-lg" />;
+      case 'silver': return <Trophy className="w-10 h-10 text-gray-300 drop-shadow-lg" />;
+      case 'bronze': return <Trophy className="w-10 h-10 text-amber-700 drop-shadow-lg" />;
+      default: return <Trophy className="w-10 h-10 text-brand-gold" />;
+    }
+  };
+
+  const getBgColor = (type: string) => {
+    switch (type) {
+      case 'gold': return 'bg-gradient-to-br from-yellow-500/20 to-yellow-600/5 border-yellow-500/30 shadow-yellow-500/10';
+      case 'silver': return 'bg-gradient-to-br from-gray-400/20 to-gray-500/5 border-gray-400/30 shadow-gray-400/10';
+      case 'bronze': return 'bg-gradient-to-br from-amber-700/20 to-amber-800/5 border-amber-700/30 shadow-amber-700/10';
+      default: return 'bg-brand-gold/20 border-brand-gold/30';
+    }
+  };
+
+  const getTitleColor = (type: string) => {
+    switch (type) {
+      case 'gold': return 'text-yellow-400';
+      case 'silver': return 'text-gray-300';
+      case 'bronze': return 'text-amber-600';
+      default: return 'text-brand-gold';
+    }
+  };
+
+  return (
+    <div 
+      className="relative w-full h-64 cursor-pointer perspective-1000 group"
+      onClick={() => setIsFlipped(!isFlipped)}
+    >
+      <div className={`relative w-full h-full transition-transform duration-700 transform-style-3d ${isFlipped ? 'rotate-y-180' : ''}`}>
+        {/* Front */}
+        <div className={`absolute inset-0 w-full h-full backface-hidden rounded-[2rem] border ${getBgColor(achievement.type)} backdrop-blur-sm p-6 flex flex-col items-center justify-center gap-4 shadow-2xl hover:scale-[1.02] transition-transform ${isFlipped ? 'z-0' : 'z-10'}`}>
+          <div className={`p-5 rounded-full bg-white/5 border border-white/5 shadow-inner`}>
+            {getIcon(achievement.type)}
+          </div>
+          <div className="text-center space-y-1">
+            <h3 className={`text-2xl font-black uppercase tracking-tight ${getTitleColor(achievement.type)}`}>{achievement.title}</h3>
+            <p className="text-[10px] font-bold text-white/40 uppercase tracking-widest">Batafsil ko'rish</p>
+          </div>
+        </div>
+
+        {/* Back */}
+        <div className={`absolute inset-0 w-full h-full backface-hidden rotate-y-180 rounded-[2rem] border border-white/10 bg-brand-black p-8 flex flex-col items-center justify-center text-center gap-4 shadow-2xl ${isFlipped ? 'z-10' : 'z-0'}`}>
+          <p className="text-sm font-bold text-white/80 leading-relaxed">{achievement.reason}</p>
+          <div className="mt-2 px-4 py-2 bg-white/5 rounded-xl border border-white/5">
+            <p className="text-[10px] font-black text-brand-gold uppercase tracking-widest">{achievement.date}</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
 
 interface OperatorPanelProps {
   user: User;
@@ -63,6 +122,10 @@ const OperatorPanel: React.FC<OperatorPanelProps> = ({ user, state, addCheckIn, 
   const [newSimEntry, setNewSimEntry] = useState({ company: 'Ucell', count: '1' });
   const [newSale, setNewSale] = useState({ company: 'Ucell', tariff: '', count: '1', bonus: '0' });
   const [openDropdown, setOpenDropdown] = useState<'company' | 'tariff' | 'simCompany' | null>(null);
+  const [ratingMode, setRatingMode] = useState<'overall' | 'Ucell' | 'Uztelecom' | 'Mobiuz' | 'Beeline'>('overall');
+  const [ratingTimeframe, setRatingTimeframe] = useState<'today' | 'week' | 'month' | 'custom'>('month');
+  const [ratingCustomStart, setRatingCustomStart] = useState(today);
+  const [ratingCustomEnd, setRatingCustomEnd] = useState(today);
   const [ratingMonthOffset, setRatingMonthOffset] = useState(0);
   const [monitoringTimeframe, setMonitoringTimeframe] = useState<'week' | 'month' | 'year'>('week');
   const [monitoringWeekOffset, setMonitoringWeekOffset] = useState(0);
@@ -128,8 +191,11 @@ const OperatorPanel: React.FC<OperatorPanelProps> = ({ user, state, addCheckIn, 
   };
 
   useEffect(() => {
-    if ((!hasCheckedIn && showCheckInUI) || isEditingCheckIn) refreshLocation();
-    if (isEditingCheckIn && userCheckIn) setCapturedPhoto(userCheckIn.photo);
+    if (!hasCheckedIn && showCheckInUI) refreshLocation();
+    if (isEditingCheckIn && userCheckIn) {
+      setCapturedPhoto(userCheckIn.photo);
+      setLocation(userCheckIn.location);
+    }
   }, [hasCheckedIn, showCheckInUI, isEditingCheckIn, userCheckIn]);
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -166,6 +232,21 @@ const OperatorPanel: React.FC<OperatorPanelProps> = ({ user, state, addCheckIn, 
 
   const handleCheckInAction = () => {
     if (capturedPhoto && location) {
+      // Geofencing check
+      if (user.workLocation && user.workLocation.lat && user.workLocation.lng) {
+        const distance = calculateDistance(
+          location.lat, 
+          location.lng, 
+          user.workLocation.lat, 
+          user.workLocation.lng
+        );
+        
+        if (distance > 300) {
+          alert(`Siz ish nuqtasidan juda uzoqdasiz (${Math.round(distance)}m). Ishni boshlash uchun 300 metr radiusda bo'lishingiz kerak.`);
+          return;
+        }
+      }
+
       if (isEditingCheckIn) {
         updateCheckIn(user.id, today, { location, photo: capturedPhoto });
         setIsEditingCheckIn(false);
@@ -208,6 +289,13 @@ const OperatorPanel: React.FC<OperatorPanelProps> = ({ user, state, addCheckIn, 
     return getLatenessStatus(userCheckIn.timestamp, wh);
   }, [userCheckIn, user.workingHours]);
 
+  const distanceToWorkPoint = useMemo(() => {
+    if (location && user.workLocation && user.workLocation.lat && user.workLocation.lng) {
+      return calculateDistance(location.lat, location.lng, user.workLocation.lat, user.workLocation.lng);
+    }
+    return null;
+  }, [location, user.workLocation]);
+
   const getWorkingTimes = () => {
     const wh = userCheckIn?.workingHours || user.workingHours || '09:00-18:00';
     const [start, end] = wh.split('-');
@@ -239,10 +327,28 @@ const OperatorPanel: React.FC<OperatorPanelProps> = ({ user, state, addCheckIn, 
                 <p className="text-lg font-black text-white">{location ? `${location.lat.toFixed(5)}, ${location.lng.toFixed(5)}` : 'Kutilmoqda...'}</p>
               </div>
             </div>
-            <button onClick={refreshLocation} disabled={isLocating} className="p-3.5 bg-white/5 text-brand-gold rounded-xl shadow-sm border border-white/10 hover:rotate-180 transition-all duration-700"><RefreshCw className={`w-5 h-5 ${isLocating ? 'animate-spin' : ''}`} /></button>
+            {!isEditingCheckIn && (
+              <button onClick={refreshLocation} disabled={isLocating} className="p-3.5 bg-white/5 text-brand-gold rounded-xl shadow-sm border border-white/10 hover:rotate-180 transition-all duration-700">
+                <RefreshCw className={`w-5 h-5 ${isLocating ? 'animate-spin' : ''}`} />
+              </button>
+            )}
           </div>
+
+          {distanceToWorkPoint !== null && distanceToWorkPoint > 300 && (
+            <div className="bg-red-500/10 border border-red-500/20 p-4 rounded-2xl flex items-center gap-3 animate-pulse">
+              <AlertTriangle className="w-5 h-5 text-red-500" />
+              <p className="text-[10px] font-black text-red-500 uppercase tracking-widest">
+                Siz ish nuqtasidan uzoqdasiz ({Math.round(distanceToWorkPoint)}m). 300m radiusga kiring!
+              </p>
+            </div>
+          )}
+
           <div className="flex gap-4">
-            <button onClick={handleCheckInAction} disabled={!location || isLocating || !capturedPhoto} className="flex-1 py-6 gold-gradient text-brand-black rounded-[2rem] font-black uppercase tracking-widest text-xs shadow-xl shadow-brand-gold/20 hover:scale-[1.02] active:scale-95 disabled:opacity-50 transition-all">
+            <button 
+              onClick={handleCheckInAction} 
+              disabled={!location || isLocating || !capturedPhoto || (distanceToWorkPoint !== null && distanceToWorkPoint > 300)} 
+              className="flex-1 py-6 gold-gradient text-brand-black rounded-[2rem] font-black uppercase tracking-widest text-xs shadow-xl shadow-brand-gold/20 hover:scale-[1.02] active:scale-95 disabled:opacity-50 transition-all"
+            >
               {isEditingCheckIn ? "Saqlash" : "Ishni boshlash"}
             </button>
             {(isEditingCheckIn || (!hasCheckedIn && showCheckInUI)) && (
@@ -438,72 +544,150 @@ const OperatorPanel: React.FC<OperatorPanelProps> = ({ user, state, addCheckIn, 
 
     switch (activeTab) {
       case 'rating': {
-        const targetMonth = new Date();
-        targetMonth.setMonth(targetMonth.getMonth() + ratingMonthOffset);
-        const monthStart = new Date(targetMonth.getFullYear(), targetMonth.getMonth(), 1);
-        const monthEnd = new Date(targetMonth.getFullYear(), targetMonth.getMonth() + 1, 0);
+        let startDate = new Date();
+        let endDate = new Date();
+        if (ratingTimeframe === 'today') {
+          startDate = new Date(today);
+          endDate = new Date(today);
+        } else if (ratingTimeframe === 'week') {
+          const d = new Date(today);
+          const day = d.getDay();
+          const diff = d.getDate() - day + (day === 0 ? -6 : 1);
+          startDate = new Date(d.setDate(diff));
+          endDate = new Date(startDate);
+          endDate.setDate(endDate.getDate() + 6);
+        } else if (ratingTimeframe === 'month') {
+          const d = new Date();
+          d.setMonth(d.getMonth() + ratingMonthOffset);
+          startDate = new Date(d.getFullYear(), d.getMonth(), 1);
+          endDate = new Date(d.getFullYear(), d.getMonth() + 1, 0);
+        } else if (ratingTimeframe === 'custom') {
+          startDate = new Date(ratingCustomStart);
+          endDate = new Date(ratingCustomEnd);
+        }
+        startDate.setHours(0, 0, 0, 0);
+        endDate.setHours(23, 59, 59, 999);
 
         const operatorRankings = state.users
           .filter(u => u.role !== 'manager')
           .map(u => {
-            const monthlySales = state.sales
+            // Determine historical league based on endDate
+            let historicalLeague = u.league || 'bronze';
+            if (u.leagueHistory && u.leagueHistory.length > 0) {
+               const sorted = [...u.leagueHistory].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+               const match = sorted.find(h => new Date(h.date) <= endDate);
+               if (match) {
+                 historicalLeague = match.league;
+               } else {
+                 historicalLeague = 'bronze';
+               }
+            }
+
+            const userSales = state.sales
               .filter(s => {
                 const saleDate = new Date(s.date);
-                return s.userId === u.id && saleDate >= monthStart && saleDate <= monthEnd;
-              })
-              .reduce((acc, s) => acc + s.count + s.bonus, 0);
-            return { ...u, monthlySales };
+                saleDate.setHours(12, 0, 0, 0);
+                const inRange = saleDate >= startDate && saleDate <= endDate;
+                const matchMode = ratingMode === 'overall' || s.company === ratingMode;
+                return s.userId === u.id && inRange && matchMode;
+              });
+            const sales = userSales.reduce((acc, s) => acc + s.count + s.bonus, 0);
+            return { ...u, sales, historicalLeague };
           })
-          .sort((a, b) => b.monthlySales - a.monthlySales);
-
-        const top3 = operatorRankings.slice(0, 3);
-        const others = operatorRankings.slice(3);
-        const maxSales = operatorRankings[0]?.monthlySales || 1;
-
-        const monthNamesUz = [
-          "Yanvar", "Fevral", "Mart", "Aprel", "May", "Iyun",
-          "Iyul", "Avgust", "Sentabr", "Oktabr", "Noyabr", "Dekabr"
-        ];
-        const monthName = `${monthNamesUz[targetMonth.getMonth()]} ${targetMonth.getFullYear()}`;
+          .sort((a, b) => b.sales - a.sales);
 
         return (
-          <div className="space-y-12 animate-in fade-in slide-in-from-bottom-8 duration-1000 max-w-6xl mx-auto py-8 px-4">
-            {/* Elegant Header */}
-            <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 border-b border-white/10 pb-12">
-              <div className="space-y-2">
-                <div className="flex items-center gap-2 text-brand-gold font-bold text-[10px] uppercase tracking-[0.2em]">
-                  <Trophy className="w-4 h-4" />
-                  <span>Muvaffaqiyatlar Sarhisobi</span>
+          <div className="space-y-8 animate-in fade-in slide-in-from-bottom-8 duration-1000 max-w-[1400px] mx-auto py-8 px-4">
+            {/* Header & Filters */}
+            <div className="flex flex-col gap-6 border-b border-white/10 pb-8">
+              <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
+                <div className="space-y-2">
+                  <div className="flex items-center gap-2 text-brand-gold font-bold text-[10px] uppercase tracking-[0.2em]">
+                    <Trophy className="w-4 h-4" />
+                    <span>Reyting</span>
+                  </div>
+                  <h2 className="text-4xl font-extrabold text-white tracking-tight">
+                    Operatorlar <span className="text-brand-gold">Reytingi</span>
+                  </h2>
                 </div>
-                <h2 className="text-5xl font-extrabold text-white tracking-tight">
-                  {t(language, 'rating_table').split(' ')[0]} <span className="text-brand-gold">{t(language, 'rating_table').split(' ')[1]}</span>
-                </h2>
-                <p className="text-white/40 font-medium">
-                  {monthName} natijalari bo'yicha eng yaxshi ko'rsatkichga ega operatorlar.
-                </p>
+                
+                {/* Timeframe Filters */}
+                <div className="flex flex-col gap-3">
+                  <div className="flex items-center gap-2 bg-brand-black p-1.5 rounded-2xl border border-white/10 overflow-x-auto">
+                    {[
+                      { id: 'today', label: 'Bugun' },
+                      { id: 'week', label: 'Hafta' },
+                      { id: 'month', label: 'Oy' },
+                      { id: 'custom', label: 'Oraliq' }
+                    ].map(t => (
+                      <button
+                        key={t.id}
+                        onClick={() => setRatingTimeframe(t.id as any)}
+                        className={`px-4 py-2 rounded-xl text-xs font-bold uppercase tracking-wider whitespace-nowrap transition-all ${ratingTimeframe === t.id ? 'bg-brand-gold text-brand-black shadow-md' : 'text-white/40 hover:text-white hover:bg-white/5'}`}
+                      >
+                        {t.label}
+                      </button>
+                    ))}
+                  </div>
+                  
+                  {ratingTimeframe === 'month' && (
+                    <div className="flex items-center gap-1 bg-brand-dark p-1 rounded-xl border border-white/5 shadow-sm self-end">
+                      <button 
+                        onClick={() => {
+                          const d = new Date();
+                          d.setMonth(d.getMonth() + ratingMonthOffset - 1);
+                          // Limit: Site started in Feb 2026
+                          if (d.getFullYear() < 2026 || (d.getFullYear() === 2026 && d.getMonth() < 1)) return;
+                          setRatingMonthOffset(prev => prev - 1);
+                        }} 
+                        className={`p-2 rounded-lg transition-colors ${(() => {
+                          const d = new Date();
+                          d.setMonth(d.getMonth() + ratingMonthOffset - 1);
+                          const isDisabled = d.getFullYear() < 2026 || (d.getFullYear() === 2026 && d.getMonth() < 1);
+                          return isDisabled ? 'text-white/10 cursor-not-allowed' : 'text-white/40 hover:text-brand-gold hover:bg-white/5';
+                        })()}`}
+                      >
+                        <ChevronLeft className="w-4 h-4" />
+                      </button>
+                      <span className="text-[10px] font-black text-white/60 px-4 uppercase tracking-widest min-w-[120px] text-center">
+                        {(() => {
+                          const monthName = translations[language].month_names[startDate.getMonth()];
+                          return `${monthName} ${startDate.getFullYear()}`;
+                        })()}
+                      </span>
+                      <button 
+                        onClick={() => {
+                          if (ratingMonthOffset >= 0) return; // Limit: Cannot go to future months
+                          setRatingMonthOffset(prev => prev + 1);
+                        }} 
+                        className={`p-2 rounded-lg transition-colors ${ratingMonthOffset >= 0 ? 'text-white/10 cursor-not-allowed' : 'text-white/40 hover:text-brand-gold hover:bg-white/5'}`}
+                      >
+                        <ChevronRight className="w-4 h-4" />
+                      </button>
+                    </div>
+                  )}
+                  
+                  {ratingTimeframe === 'custom' && (
+                    <div className="flex items-center gap-2 self-end">
+                      <input type="date" value={ratingCustomStart} onChange={e => setRatingCustomStart(e.target.value)} className="bg-brand-black border border-white/10 text-white text-xs p-2 rounded-lg outline-none focus:border-brand-gold" />
+                      <span className="text-white/40">-</span>
+                      <input type="date" value={ratingCustomEnd} onChange={e => setRatingCustomEnd(e.target.value)} className="bg-brand-black border border-white/10 text-white text-xs p-2 rounded-lg outline-none focus:border-brand-gold" />
+                    </div>
+                  )}
+                </div>
               </div>
-              <div className="flex items-center gap-3 bg-brand-black p-1.5 rounded-2xl border border-white/10">
-                <div className="flex items-center gap-1 bg-brand-dark p-1 rounded-xl border border-white/5 shadow-sm">
-                  <button 
-                    onClick={() => setRatingMonthOffset(prev => prev - 1)}
-                    className="p-2 hover:bg-white/5 rounded-lg transition-colors text-white/40 hover:text-brand-gold"
+
+              {/* Mode Tabs */}
+              <div className="flex items-center gap-2 overflow-x-auto pb-2">
+                {['overall', 'Ucell', 'Uztelecom', 'Mobiuz', 'Beeline'].map(mode => (
+                  <button
+                    key={mode}
+                    onClick={() => setRatingMode(mode as any)}
+                    className={`px-6 py-3 rounded-2xl text-sm font-black uppercase tracking-widest whitespace-nowrap transition-all border ${ratingMode === mode ? 'bg-brand-gold/10 border-brand-gold text-brand-gold shadow-[0_0_15px_rgba(255,215,0,0.1)]' : 'bg-brand-black border-white/5 text-white/40 hover:text-white hover:bg-white/5'}`}
                   >
-                    <ChevronLeft className="w-4 h-4" />
+                    {mode === 'overall' ? 'Umumiy' : mode}
                   </button>
-                  <span className="text-[10px] font-black text-white/60 px-4 uppercase tracking-widest min-w-[120px] text-center">
-                    {monthName}
-                  </span>
-                  <button 
-                    onClick={() => setRatingMonthOffset(prev => prev + 1)}
-                    className="p-2 hover:bg-white/5 rounded-lg transition-colors text-white/40 hover:text-brand-gold"
-                  >
-                    <ChevronRight className="w-4 h-4" />
-                  </button>
-                </div>
-                <div className="bg-brand-dark px-4 py-2 rounded-xl shadow-sm border border-white/5 flex items-center gap-2">
-                  <div className="w-2 h-2 rounded-full bg-brand-gold animate-pulse"></div>
-                  <span className="text-[10px] font-bold text-white/60 uppercase tracking-wider">Jonli Yangilanish</span>
-                </div>
+                ))}
               </div>
             </div>
 
@@ -516,115 +700,57 @@ const OperatorPanel: React.FC<OperatorPanelProps> = ({ user, state, addCheckIn, 
               </div>
             ) : (
               <>
-                {/* Podium Section */}
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-8 items-end pt-10">
-              {/* 2nd Place */}
-              <div className="order-2 md:order-1">
-                <div className="bg-brand-dark rounded-[2.5rem] p-8 border border-white/10 shadow-xl relative group hover:-translate-y-2 transition-all duration-500">
-                  <div className="absolute -top-6 left-1/2 -translate-x-1/2 w-12 h-12 bg-white/10 rounded-2xl flex items-center justify-center font-black text-white border-4 border-brand-dark shadow-lg">2</div>
-                  <div className="flex flex-col items-center text-center space-y-4">
-                    <div className="w-20 h-20 rounded-3xl bg-brand-black border border-white/5 flex items-center justify-center text-2xl font-black text-white/20 group-hover:bg-white/10 group-hover:text-white transition-colors shadow-sm overflow-hidden">
-                      {top3[1]?.photo ? (
-                        <img src={top3[1].photo} alt={top3[1].firstName} className="w-full h-full object-cover" />
-                      ) : (
-                        <>{top3[1]?.firstName?.[0]}{top3[1]?.lastName?.[0]}</>
-                      )}
-                    </div>
-                    <div>
-                      <h3 className="text-xl font-bold text-white">{top3[1]?.firstName} {top3[1]?.lastName}</h3>
-                      <p className="text-[10px] font-black text-white/40 uppercase tracking-widest">Kumush Daraja</p>
-                    </div>
-                  </div>
-                </div>
-              </div>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mt-8 items-start">
+                  {['gold', 'silver', 'bronze'].map((leagueName) => {
+                    const groupUsers = operatorRankings.filter(u => u.historicalLeague === leagueName);
+                    
+                    const leagueInfo = leagueName === 'gold' 
+                      ? { color: 'text-yellow-400', bg: 'bg-yellow-400/10', title: "1 Gold", border: 'border-yellow-400/20' }
+                      : leagueName === 'silver'
+                      ? { color: 'text-gray-300', bg: 'bg-gray-300/10', title: "2 Silver", border: 'border-gray-300/20' }
+                      : { color: 'text-orange-500', bg: 'bg-orange-500/10', title: "3 Bronza", border: 'border-orange-500/20' };
 
-              {/* 1st Place */}
-              <div className="order-1 md:order-2">
-                <div className="bg-gradient-to-br from-[#F2D06B] via-[#D4AF37] to-[#997A1F] rounded-[3rem] p-10 !text-black shadow-2xl shadow-[#D4AF37]/20 relative group hover:-translate-y-4 transition-all duration-500 border-4 border-white/10">
-                  <div className="absolute top-0 right-0 w-32 h-32 bg-white/20 rounded-full -mr-16 -mt-16 blur-3xl group-hover:bg-white/40 transition-all"></div>
-                  <div className="absolute -top-8 left-1/2 -translate-x-1/2 w-16 h-16 bg-[#D4AF37] rounded-2xl flex items-center justify-center font-black text-white keep-white shadow-xl rotate-3 group-hover:rotate-12 transition-transform">
-                    <Trophy className="w-8 h-8" />
-                  </div>
-                  <div className="flex flex-col items-center text-center space-y-6 relative z-10">
-                    <div className="w-28 h-28 rounded-[2.5rem] bg-black/20 p-1 shadow-2xl backdrop-blur-sm">
-                      <div className="w-full h-full rounded-[2.3rem] bg-brand-black flex items-center justify-center text-4xl font-black text-[#D4AF37] overflow-hidden">
-                        {top3[0]?.photo ? (
-                          <img src={top3[0].photo} alt={top3[0].firstName} className="w-full h-full object-cover" />
-                        ) : (
-                          <>{top3[0]?.firstName?.[0]}{top3[0]?.lastName?.[0]}</>
-                        )}
-                      </div>
-                    </div>
-                    <div>
-                      <h3 className="text-3xl font-black text-white tracking-tight drop-shadow-md">{top3[0]?.firstName} {top3[0]?.lastName}</h3>
-                      <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-black/10 border border-white/20 mt-2">
-                        <span className="w-1.5 h-1.5 rounded-full bg-white animate-pulse"></span>
-                        <span className="text-[9px] font-black uppercase tracking-widest text-white">{t(language, 'monthly_champion')}</span>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              {/* 3rd Place */}
-              <div className="order-3">
-                <div className="bg-brand-dark rounded-[2.5rem] p-8 border border-white/10 shadow-xl relative group hover:-translate-y-2 transition-all duration-500">
-                  <div className="absolute -top-6 left-1/2 -translate-x-1/2 w-12 h-12 bg-orange-500/80 rounded-2xl flex items-center justify-center font-black text-white border-4 border-brand-dark shadow-lg">3</div>
-                  <div className="flex flex-col items-center text-center space-y-4">
-                    <div className="w-20 h-20 rounded-3xl bg-brand-black border border-white/5 flex items-center justify-center text-2xl font-black text-white/20 group-hover:bg-orange-500/10 group-hover:text-orange-500 transition-colors shadow-sm overflow-hidden">
-                      {top3[2]?.photo ? (
-                        <img src={top3[2].photo} alt={top3[2].firstName} className="w-full h-full object-cover" />
-                      ) : (
-                        <>{top3[2]?.firstName?.[0]}{top3[2]?.lastName?.[0]}</>
-                      )}
-                    </div>
-                    <div>
-                      <h3 className="text-xl font-bold text-white">{top3[2]?.firstName} {top3[2]?.lastName}</h3>
-                      <p className="text-[10px] font-black text-orange-500 uppercase tracking-widest">Bronza Daraja</p>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-                {/* List Section */}
-                <div className="bg-brand-dark rounded-[2.5rem] border border-white/10 shadow-2xl overflow-hidden">
-                  <div className="px-8 py-6 bg-brand-black border-b border-white/10 flex items-center justify-between">
-                    <span className="text-[11px] font-black text-white/20 uppercase tracking-[0.2em]">Boshqa Ishtirokchilar</span>
-                  </div>
-                  <div className="divide-y divide-white/5">
-                    {operatorRankings.length > 3 ? (
-                      operatorRankings.slice(3).map((u, idx) => (
-                        <div key={u.id} className={`px-8 py-6 flex items-center justify-between hover:bg-white/5 transition-colors group ${u.id === user.id ? 'bg-brand-gold/5' : ''}`}>
-                          <div className="flex items-center gap-6">
-                            <span className="w-6 text-center font-bold text-white/20 group-hover:text-brand-gold transition-colors">{idx + 4}</span>
-                            <div className="w-12 h-12 rounded-2xl bg-brand-black border border-white/5 flex items-center justify-center font-bold text-white/20 text-sm group-hover:scale-110 group-hover:bg-brand-dark transition-all overflow-hidden">
-                              {u.photo ? (
-                                <img src={u.photo} alt={u.firstName} className="w-full h-full object-cover" />
-                              ) : (
-                                <>{u.firstName?.[0]}{u.lastName?.[0]}</>
-                              )}
-                            </div>
-                            <div>
-                              <p className="font-bold text-white flex items-center gap-2">
-                                {u.firstName} {u.lastName}
-                                {u.id === user.id && <span className="text-[8px] bg-brand-gold text-brand-black px-2 py-0.5 rounded-full uppercase tracking-tighter">Siz</span>}
-                              </p>
-                              <p className="text-[10px] font-medium text-white/40">Operator</p>
-                            </div>
+                    return (
+                      <div key={leagueName} className={`bg-brand-dark rounded-[2rem] border ${leagueInfo.border} shadow-2xl overflow-hidden flex flex-col max-h-[800px]`}>
+                        <div className={`px-6 py-5 border-b border-white/10 flex items-center justify-between ${leagueInfo.bg}`}>
+                          <div className="flex items-center gap-3">
+                            <Trophy className={`w-5 h-5 ${leagueInfo.color}`} />
+                            <span className={`text-sm font-black uppercase tracking-[0.2em] ${leagueInfo.color}`}>{leagueInfo.title}</span>
                           </div>
-                          <div className="text-right">
-                            <p className="text-lg font-black text-slate-900">{u.monthlySales}</p>
-                            <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest">{t(language, 'monthly_sales')}</p>
-                          </div>
+                          <span className="text-[10px] font-black text-white/40 uppercase tracking-widest">{groupUsers.length} ta operator</span>
                         </div>
-                      ))
-                    ) : (
-                      <div className="px-8 py-12 text-center">
-                        <p className="text-slate-400 font-bold uppercase tracking-widest text-[10px]">4 va 5-o'rinlar uchun ishtirokchilar yetarli emas</p>
+                        <div className="divide-y divide-white/5 flex-1 overflow-y-auto">
+                          {groupUsers.length === 0 ? (
+                            <div className="p-8 text-center text-white/20 text-xs font-bold uppercase tracking-widest">Operatorlar yo'q</div>
+                          ) : groupUsers.map((u, idx) => {
+                            return (
+                              <div key={u.id} className={`px-6 py-5 flex items-center justify-between hover:bg-white/5 transition-colors group ${u.id === user.id ? 'bg-brand-gold/5' : ''}`}>
+                                <div className="flex items-center gap-4">
+                                  <span className="w-5 text-center font-bold text-white/20 group-hover:text-brand-gold transition-colors">{idx + 1}</span>
+                                  <div className="w-10 h-10 rounded-xl bg-brand-black border border-white/5 flex items-center justify-center font-bold text-white/20 text-xs group-hover:scale-110 group-hover:bg-brand-dark transition-all overflow-hidden">
+                                    {u.photo ? <img src={u.photo} alt={u.firstName} className="w-full h-full object-cover" /> : <>{u.firstName?.[0]}{u.lastName?.[0]}</>}
+                                  </div>
+                                  <div>
+                                    <p className="font-bold text-white flex items-center gap-2 text-sm">
+                                      {u.firstName} {u.lastName}
+                                      {u.id === user.id && <span className="text-[8px] bg-brand-gold text-brand-black px-2 py-0.5 rounded-full uppercase tracking-tighter">Siz</span>}
+                                    </p>
+                                    <p className="text-[9px] font-medium text-white/40">{u.department || 'Bo\'limsiz'}</p>
+                                  </div>
+                                </div>
+                                <div className="flex items-center gap-4">
+                                  <div className="text-right min-w-[50px]">
+                                    <p className="text-base font-black text-white">{u.sales}</p>
+                                    <p className="text-[8px] font-black text-white/40 uppercase tracking-widest">Sotuv</p>
+                                  </div>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
                       </div>
-                    )}
-                  </div>
+                    );
+                  })}
                 </div>
               </>
             )}
@@ -1249,7 +1375,11 @@ const OperatorPanel: React.FC<OperatorPanelProps> = ({ user, state, addCheckIn, 
       case 'profile': {
         const totalSales = state.sales.filter(s => s.userId === user.id).reduce((acc, s) => acc + s.count + s.bonus, 0);
         const totalCheckIns = state.checkIns.filter(c => c.userId === user.id).length;
-        const joinDate = new Date(user.createdAt).toLocaleDateString('uz-UZ', { year: 'numeric', month: 'long', day: 'numeric' });
+        const joinDate = (() => {
+          const d = new Date(user.createdAt);
+          const monthName = translations[language].month_names[d.getMonth()];
+          return `${d.getDate()}-${monthName}, ${d.getFullYear()}`;
+        })();
 
         return (
           <div className="max-w-5xl mx-auto py-8 px-4 space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-700">
@@ -1339,6 +1469,29 @@ const OperatorPanel: React.FC<OperatorPanelProps> = ({ user, state, addCheckIn, 
                   </div>
                 );
               })}
+            </div>
+
+            {/* Achievements Section */}
+            <div className="mt-8">
+              <h3 className="text-2xl font-black text-white mb-6 flex items-center gap-3">
+                <Trophy className="w-6 h-6 text-brand-gold" />
+                Yutuqlar
+              </h3>
+              
+              {user.achievements && user.achievements.length > 0 ? (
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+                  {user.achievements.map(achievement => (
+                    <AchievementCard key={achievement.id} achievement={achievement} />
+                  ))}
+                </div>
+              ) : (
+                <div className="bg-brand-dark rounded-[2.5rem] p-10 text-center border border-white/10">
+                  <div className="w-16 h-16 bg-white/5 rounded-2xl flex items-center justify-center mx-auto mb-4 text-white/20">
+                    <Trophy className="w-8 h-8" />
+                  </div>
+                  <p className="text-white/40 font-medium">Hozircha yutuqlar yo'q</p>
+                </div>
+              )}
             </div>
 
             {isEditingProfile && (
@@ -1673,16 +1826,31 @@ const OperatorPanel: React.FC<OperatorPanelProps> = ({ user, state, addCheckIn, 
                         });
                         setEditingSaleId(null);
                       } else {
-                        addSale({ 
-                          id: Math.random().toString(36).substr(2, 9), 
-                          userId: user.id, 
-                          date: today, 
-                          company: newSale.company, 
-                          tariff: newSale.tariff, 
-                          count: count, 
-                          bonus: bonus, 
-                          timestamp: new Date().toISOString() 
-                        }); 
+                        // Check if a sale with the same company and tariff already exists for today
+                        const existingSale = state.sales.find(s => 
+                          s.userId === user.id && 
+                          s.date === today && 
+                          s.company === newSale.company && 
+                          s.tariff === newSale.tariff
+                        );
+
+                        if (existingSale) {
+                          updateSale(existingSale.id, {
+                            count: existingSale.count + count,
+                            bonus: existingSale.bonus + bonus
+                          });
+                        } else {
+                          addSale({ 
+                            id: Math.random().toString(36).substr(2, 9), 
+                            userId: user.id, 
+                            date: today, 
+                            company: newSale.company, 
+                            tariff: newSale.tariff, 
+                            count: count, 
+                            bonus: bonus, 
+                            timestamp: new Date().toISOString() 
+                          }); 
+                        }
                       }
                       setNewSale({ company: 'Ucell', tariff: '', count: '1', bonus: '0' }); 
                       setShowSaleForm(false); 
@@ -1812,6 +1980,7 @@ const OperatorPanel: React.FC<OperatorPanelProps> = ({ user, state, addCheckIn, 
                       <button 
                         type="submit" 
                         disabled={(() => {
+                          if (!newSale.tariff) return true;
                           const count = Number(newSale.count);
                           const bonus = Number(newSale.bonus);
                           if (count <= 0) return true;

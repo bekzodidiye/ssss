@@ -1,111 +1,98 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { motion, useDragControls } from 'framer-motion';
-import { X, Minus, Plus, Divide, Hash, Delete, Percent, Maximize2, Minimize2, Move } from 'lucide-react';
+import { X, Minus, Plus, Divide, Hash, Delete, Percent, Move } from 'lucide-react';
 import { t, Language } from '../translations';
 
 interface CalculatorProps {
   onClose: () => void;
   language: Language;
+  isDarkMode: boolean;
 }
 
-const Calculator: React.FC<CalculatorProps> = ({ onClose, language }) => {
-  const [display, setDisplay] = useState('0');
-  const [equation, setEquation] = useState('');
-  const [width, setWidth] = useState(300);
+const formatNumber = (num: string) => {
+  return num.replace(/(\d+)/g, (match) => {
+    return match.replace(/\B(?=(\d{3})+(?!\d))/g, ' ');
+  });
+};
+const getFontSize = (text: string) => {
+  const len = text.length;
+  if (len <= 9) return '2.5rem';
+  if (len <= 13) return '2rem';
+  if (len <= 18) return '1.5rem';
+  if (len <= 24) return '1.2rem';
+  if (len <= 32) return '1rem';
+  return '0.8rem';
+};
+
+const Calculator: React.FC<CalculatorProps> = ({ onClose, language, isDarkMode }) => {
+  const [expression, setExpression] = useState('0');
+  const [width, setWidth] = useState(320);
   const dragControls = useDragControls();
-
-  const handleNumber = (num: string) => {
-    if (display === '0' || display === 'Error') {
-      setDisplay(num);
-    } else {
-      setDisplay(display + num);
-    }
-  };
-
-  const handleOperator = (op: string) => {
-    if (display === 'Error') return;
-    setEquation(display + ' ' + op + ' ');
-    setDisplay('0');
-  };
-
-  const handlePercent = () => {
-    if (display === 'Error') return;
-    const val = parseFloat(display);
-    if (isNaN(val)) return;
-    setDisplay((val / 100).toString());
-  };
-
-  const calculate = () => {
-    if (!equation || display === 'Error') return;
-    try {
-      const parts = equation.split(' ');
-      const num1 = parseFloat(parts[0]);
-      const op = parts[1];
-      const num2 = parseFloat(display);
-      
-      if (isNaN(num1) || isNaN(num2)) return;
-
-      let result = 0;
-      switch (op) {
-        case '+': result = num1 + num2; break;
-        case '-': result = num1 - num2; break;
-        case '*': result = num1 * num2; break;
-        case '/': 
-          if (num2 === 0) {
-            setDisplay('Error');
-            return;
-          }
-          result = num1 / num2; 
-          break;
-      }
-      
-      const finalResult = Number(result.toFixed(8)).toString();
-      setDisplay(finalResult);
-      setEquation('');
-    } catch (e) {
-      setDisplay('Error');
-    }
-  };
-
-  const handleDelete = () => {
-    if (display === 'Error' || display.length === 1) {
-      setDisplay('0');
-    } else {
-      setDisplay(display.slice(0, -1));
-    }
-  };
-
-  const clear = () => {
-    setDisplay('0');
-    setEquation('');
-  };
+  const inputRef = useRef<HTMLTextAreaElement>(null);
+  const pendingCursorRef = useRef<{ pos: number; val: string } | null>(null);
 
   useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      const key = e.key;
-      
-      if (/[0-9.]/.test(key)) {
-        handleNumber(key);
-      } else if (['+', '-', '*', '/'].includes(key)) {
-        handleOperator(key);
-      } else if (key === '%') {
-        handlePercent();
-      } else if (key === 'Enter' || key === '=') {
-        e.preventDefault();
-        calculate();
-      } else if (key === 'Backspace') {
-        handleDelete();
-      } else if (key === 'Escape') {
-        clear();
-      }
-    };
+    inputRef.current?.focus();
+  }, []);
 
-    window.addEventListener('keydown', handleKeyDown);
-    return () => {
-      window.removeEventListener('keydown', handleKeyDown);
-    };
-  }, [display, equation]);
+  useEffect(() => {
+    if (pendingCursorRef.current && inputRef.current) {
+      const { pos, val } = pendingCursorRef.current;
+      const newVal = formatNumber(expression);
+      
+      let nonSpaceCount = 0;
+      for (let i = 0; i < pos; i++) {
+        if (val[i] !== ' ') nonSpaceCount++;
+      }
+      
+      let newPos = 0;
+      let currentNonSpaceCount = 0;
+      while (newPos < newVal.length && currentNonSpaceCount < nonSpaceCount) {
+        if (newVal[newPos] !== ' ') currentNonSpaceCount++;
+        newPos++;
+      }
+      
+      while (newPos < newVal.length && newVal[newPos] === ' ') {
+        newPos++;
+      }
+      
+      inputRef.current.setSelectionRange(newPos, newPos);
+      pendingCursorRef.current = null;
+    }
+  }, [expression]);
+
+  const buttonPadding = 'p-4';
+  const buttonTextSize = 'text-xl';
+  const iconSize = 'w-6 h-6';
+  const clear = () => setExpression('0');
+  const handleDelete = () => setExpression(expression.length > 1 ? expression.slice(0, -1) : '0');
+  const handlePercent = () => setExpression((parseFloat(expression) / 100).toString());
+  const handleOperator = (op: string) => {
+    if (expression === 'Error') return;
+    const lastChar = expression.slice(-1);
+    if (['+', '-', '*', '/', '.'].includes(lastChar)) {
+      setExpression(expression.slice(0, -1) + op);
+    } else {
+      setExpression(expression + op);
+    }
+  };
+  const handleNumber = (num: string) => {
+    if (expression === 'Error') {
+      setExpression(num === '.' ? '0.' : num);
+      return;
+    }
+    // Prevent multiple dots in a single number
+    if (num === '.' && expression.split(/[+\-*/]/).pop()?.includes('.')) return;
+    setExpression(expression === '0' && num !== '.' ? num : expression + num);
+  };
+  const calculate = () => {
+    try {
+      setExpression(eval(expression).toString());
+    } catch (e) {
+      setExpression('Error');
+    }
+  };
 
   return (
     <motion.div
@@ -117,10 +104,10 @@ const Calculator: React.FC<CalculatorProps> = ({ onClose, language }) => {
       animate={{ opacity: 1, scale: 1, y: 0 }}
       exit={{ opacity: 0, scale: 0.9, y: 20 }}
       style={{ width: `${width}px` }}
-      className="fixed top-24 right-8 z-[2000] theme-blue-box backdrop-blur-xl border border-white/10 rounded-[2rem] shadow-2xl overflow-hidden"
+      className={`fixed top-24 right-8 z-[2000] backdrop-blur-xl border rounded-[2rem] shadow-2xl flex flex-col ${isDarkMode ? 'bg-zinc-900 border-white/10' : 'bg-white border-gray-200'}`}
     >
       <div 
-        className="p-4 bg-brand-gold/10 border-b border-white/5 flex items-center justify-between cursor-move"
+        className={`p-4 bg-brand-gold/10 border-b flex items-center justify-between cursor-move shrink-0 ${isDarkMode ? 'border-white/5' : 'border-gray-100'}`}
         onPointerDown={(e) => dragControls.start(e)}
       >
         <div className="flex items-center gap-2 pointer-events-none">
@@ -130,58 +117,106 @@ const Calculator: React.FC<CalculatorProps> = ({ onClose, language }) => {
           <span className="text-[10px] font-black text-brand-gold uppercase tracking-widest">{t(language, 'calculator')}</span>
         </div>
         <div className="flex items-center gap-2">
-          <div className="flex items-center gap-2 mr-2 bg-black/20 px-2 py-1 rounded-lg border border-white/5">
-            <Minimize2 className="w-3 h-3 text-white/40" />
-            <input 
-              type="range" 
-              min="200" 
-              max="400" 
-              value={width} 
-              onChange={(e) => setWidth(parseInt(e.target.value))}
-              className="w-16 h-1 bg-white/10 rounded-lg appearance-none cursor-pointer accent-brand-gold"
-            />
-            <Maximize2 className="w-3 h-3 text-white/40" />
-          </div>
-          <button onClick={onClose} className="p-1.5 hover:bg-white/10 rounded-lg text-white/40 hover:text-brand-gold transition-colors cursor-pointer">
+          <button onClick={onClose} className={`p-1.5 rounded-lg transition-colors cursor-pointer ${isDarkMode ? 'hover:bg-white/10 text-white/40 hover:text-brand-gold' : 'hover:bg-gray-100 text-gray-400 hover:text-brand-gold'}`}>
             <X className="w-4 h-4" />
           </button>
         </div>
       </div>
 
-      <div className="p-6">
-        <div className="mb-6 text-right bg-black/20 p-4 rounded-2xl border border-white/5">
-          <div className="text-[10px] font-bold text-white/50 h-4 mb-1 font-mono">{equation}</div>
-          <div className="text-3xl font-black text-white tracking-tighter truncate font-mono">{display}</div>
+      <div className="p-4 sm:p-6 flex-1 flex flex-col">
+        <div 
+          className={`mb-4 sm:mb-6 text-right p-6 rounded-2xl border overflow-y-auto shrink-0 flex items-center justify-end min-h-[140px] max-h-[200px] relative cursor-text ${isDarkMode ? 'bg-zinc-800 border-white/10' : 'bg-gray-100 border-gray-200'}`}
+          onClick={() => inputRef.current?.focus()}
+        >
+          <textarea
+            ref={inputRef}
+            value={formatNumber(expression)}
+            onChange={(e) => {
+              const textarea = e.target;
+              const pos = textarea.selectionStart;
+              const val = textarea.value;
+              let value = val.replace(/\s/g, '');
+              // Prevent consecutive operators
+              value = value.replace(/([+\-*/.])([+\-*/.]+)/g, '$1');
+              // Allow only numbers, operators, and decimal point
+              if (/^[0-9+\-*/.]*$/.test(value)) {
+                setExpression(value || '0');
+                pendingCursorRef.current = { pos, val };
+              }
+            }}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                e.preventDefault();
+                calculate();
+              }
+              if (e.key === 'Escape') {
+                clear();
+              }
+            }}
+            className={`font-black tracking-tighter font-mono transition-all duration-200 break-all w-full text-right bg-transparent outline-none resize-none ${isDarkMode ? 'text-white' : 'text-gray-900'}`}
+            style={{ 
+              fontSize: getFontSize(formatNumber(expression)),
+              lineHeight: '1.1',
+              height: '100%',
+            }}
+          />
         </div>
 
-        <div className="grid grid-cols-4 gap-2">
-          <button onClick={clear} className="p-4 bg-red-500/10 text-red-500 rounded-2xl font-black text-xs hover:bg-red-500/20 transition-all uppercase cursor-pointer">C</button>
-          <button onClick={handleDelete} className="p-4 bg-white/5 text-white/80 rounded-2xl font-black text-xs hover:bg-white/10 transition-all cursor-pointer"><Delete className="w-4 h-4 mx-auto" /></button>
-          <button onClick={handlePercent} className="p-4 bg-white/5 text-brand-gold rounded-2xl font-black text-xs hover:bg-white/10 transition-all cursor-pointer"><Percent className="w-4 h-4 mx-auto" /></button>
-          <button onClick={() => handleOperator('/')} className="p-4 bg-white/5 text-brand-gold rounded-2xl font-black text-xs hover:bg-white/10 transition-all cursor-pointer"><Divide className="w-4 h-4 mx-auto" /></button>
+        <div className="grid grid-cols-4 gap-2 flex-1">
+          <button onClick={clear} className={`${buttonPadding} bg-red-500/10 text-red-500 rounded-2xl font-black ${buttonTextSize} hover:bg-red-500/20 transition-all uppercase cursor-pointer flex items-center justify-center`}>C</button>
+          <button onClick={handleDelete} className={`${buttonPadding} rounded-2xl font-black transition-all cursor-pointer flex items-center justify-center ${isDarkMode ? 'bg-zinc-800 text-white/80 hover:bg-zinc-700' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}><Delete className={iconSize} /></button>
+          <button onClick={handlePercent} className={`${buttonPadding} rounded-2xl font-black transition-all cursor-pointer flex items-center justify-center ${isDarkMode ? 'bg-zinc-800 text-brand-gold hover:bg-zinc-700' : 'bg-gray-100 text-brand-gold hover:bg-gray-200'}`}><Percent className={iconSize} /></button>
+          <button onClick={() => handleOperator('/')} className={`${buttonPadding} rounded-2xl font-black transition-all cursor-pointer flex items-center justify-center ${isDarkMode ? 'bg-zinc-800 text-brand-gold hover:bg-zinc-700' : 'bg-gray-100 text-brand-gold hover:bg-gray-200'}`}><Divide className={iconSize} /></button>
 
           {[7, 8, 9].map(n => (
-            <button key={n} onClick={() => handleNumber(n.toString())} className="p-4 bg-white/5 text-white rounded-2xl font-black text-sm hover:bg-white/10 transition-all cursor-pointer">{n}</button>
+            <button key={n} onClick={() => handleNumber(n.toString())} className={`${buttonPadding} rounded-2xl font-black ${buttonTextSize} transition-all cursor-pointer flex items-center justify-center ${isDarkMode ? 'bg-zinc-800 text-white hover:bg-zinc-700' : 'bg-gray-100 text-gray-900 hover:bg-gray-200'}`}>{n}</button>
           ))}
-          <button onClick={() => handleOperator('*')} className="p-4 bg-white/5 text-brand-gold rounded-2xl font-black text-xs hover:bg-white/10 transition-all cursor-pointer"><X className="w-4 h-4 mx-auto" /></button>
+          <button onClick={() => handleOperator('*')} className={`${buttonPadding} rounded-2xl font-black transition-all cursor-pointer flex items-center justify-center ${isDarkMode ? 'bg-zinc-800 text-brand-gold hover:bg-zinc-700' : 'bg-gray-100 text-brand-gold hover:bg-gray-200'}`}><X className={iconSize} /></button>
 
           {[4, 5, 6].map(n => (
-            <button key={n} onClick={() => handleNumber(n.toString())} className="p-4 bg-white/5 text-white rounded-2xl font-black text-sm hover:bg-white/10 transition-all cursor-pointer">{n}</button>
+            <button key={n} onClick={() => handleNumber(n.toString())} className={`${buttonPadding} rounded-2xl font-black ${buttonTextSize} transition-all cursor-pointer flex items-center justify-center ${isDarkMode ? 'bg-zinc-800 text-white hover:bg-zinc-700' : 'bg-gray-100 text-gray-900 hover:bg-gray-200'}`}>{n}</button>
           ))}
-          <button onClick={() => handleOperator('-')} className="p-4 bg-white/5 text-brand-gold rounded-2xl font-black text-xs hover:bg-white/10 transition-all cursor-pointer"><Minus className="w-4 h-4 mx-auto" /></button>
+          <button onClick={() => handleOperator('-')} className={`${buttonPadding} rounded-2xl font-black transition-all cursor-pointer flex items-center justify-center ${isDarkMode ? 'bg-zinc-800 text-brand-gold hover:bg-zinc-700' : 'bg-gray-100 text-brand-gold hover:bg-gray-200'}`}><Minus className={iconSize} /></button>
 
           {[1, 2, 3].map(n => (
-            <button key={n} onClick={() => handleNumber(n.toString())} className="p-4 bg-white/5 text-white rounded-2xl font-black text-sm hover:bg-white/10 transition-all cursor-pointer">{n}</button>
+            <button key={n} onClick={() => handleNumber(n.toString())} className={`${buttonPadding} rounded-2xl font-black ${buttonTextSize} transition-all cursor-pointer flex items-center justify-center ${isDarkMode ? 'bg-zinc-800 text-white hover:bg-zinc-700' : 'bg-gray-100 text-gray-900 hover:bg-gray-200'}`}>{n}</button>
           ))}
-          <button onClick={() => handleOperator('+')} className="p-4 bg-white/5 text-brand-gold rounded-2xl font-black text-xs hover:bg-white/10 transition-all cursor-pointer"><Plus className="w-4 h-4 mx-auto" /></button>
+          <button onClick={() => handleOperator('+')} className={`${buttonPadding} rounded-2xl font-black transition-all cursor-pointer flex items-center justify-center ${isDarkMode ? 'bg-zinc-800 text-brand-gold hover:bg-zinc-700' : 'bg-gray-100 text-brand-gold hover:bg-gray-200'}`}><Plus className={iconSize} /></button>
 
-          <button onClick={() => handleNumber('0')} className="p-4 bg-white/5 text-white rounded-2xl font-black text-sm hover:bg-white/10 transition-all cursor-pointer">0</button>
-          <button onClick={() => handleNumber('.')} className="p-4 bg-white/5 text-white rounded-2xl font-black text-sm hover:bg-white/10 transition-all cursor-pointer">.</button>
-          <button onClick={() => handleNumber('200')} className="p-4 bg-brand-gold/10 text-brand-gold rounded-2xl font-black text-[10px] hover:bg-brand-gold/20 transition-all cursor-pointer">200</button>
-          <button onClick={() => handleNumber('399')} className="p-4 bg-brand-gold/10 text-brand-gold rounded-2xl font-black text-[10px] hover:bg-brand-gold/20 transition-all cursor-pointer">399</button>
-
-          <button onClick={calculate} className="col-span-4 p-4 bg-brand-gold text-brand-black rounded-2xl font-black text-sm hover:scale-[1.02] active:scale-95 transition-all cursor-pointer">=</button>
+          <button onClick={() => handleNumber('0')} className={`col-span-2 ${buttonPadding} rounded-2xl font-black ${buttonTextSize} transition-all cursor-pointer flex items-center justify-center ${isDarkMode ? 'bg-zinc-800 text-white hover:bg-zinc-700' : 'bg-gray-100 text-gray-900 hover:bg-gray-200'}`}>0</button>
+          <button onClick={() => handleNumber('.')} className={`${buttonPadding} rounded-2xl font-black ${buttonTextSize} transition-all cursor-pointer flex items-center justify-center ${isDarkMode ? 'bg-zinc-800 text-white hover:bg-zinc-700' : 'bg-gray-100 text-gray-900 hover:bg-gray-200'}`}>.</button>
+          <button onClick={calculate} className={`col-span-4 ${buttonPadding} bg-brand-gold text-brand-black rounded-2xl font-black ${buttonTextSize} hover:scale-[1.02] active:scale-95 transition-all cursor-pointer flex items-center justify-center`}>=</button>
         </div>
+      </div>
+
+      {/* Resize Handle */}
+      <div 
+        className="absolute bottom-0 right-0 w-8 h-8 cursor-se-resize flex items-end justify-end p-2 text-white/30 hover:text-brand-gold transition-colors z-50"
+        onPointerDown={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          const startX = e.clientX;
+          const startWidth = width;
+          
+          const handlePointerMove = (moveEvent: PointerEvent) => {
+            const newWidth = Math.max(250, Math.min(800, startWidth + (moveEvent.clientX - startX)));
+            setWidth(newWidth);
+          };
+          
+          const handlePointerUp = () => {
+            window.removeEventListener('pointermove', handlePointerMove);
+            window.removeEventListener('pointerup', handlePointerUp);
+            document.body.style.cursor = '';
+          };
+          
+          document.body.style.cursor = 'se-resize';
+          window.addEventListener('pointermove', handlePointerMove);
+          window.addEventListener('pointerup', handlePointerUp);
+        }}
+      >
+        <svg width="12" height="12" viewBox="0 0 12 12" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <path d="M12 12H9L12 9V12ZM12 7H9L12 4V7ZM7 12H4L7 9V12Z" fill="currentColor"/>
+        </svg>
       </div>
     </motion.div>
   );

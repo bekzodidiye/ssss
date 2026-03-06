@@ -9,6 +9,7 @@ import {
   CheckCircle, FileText, UserPlus, Award, BarChart2,
   ArrowLeft, CalendarDays,
   Plus,
+  PlusCircle,
   Image as ImageIcon,
   LogIn as LogInIcon,
   LogOut as LogOutIcon,
@@ -29,6 +30,8 @@ import {
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine, Legend, LabelList, Cell } from 'recharts';
 import L from 'leaflet';
 import { getTodayStr, isDateMatch, getLatenessStatus, getEarlyDepartureStatus, getUzTime, formatUzTime, formatUzDateTime } from '../utils';
+import MapPicker from './MapPicker';
+import StaffMap from './StaffMap';
 import { t, Language, translations } from '../translations';
 
 interface ManagerPanelProps {
@@ -39,14 +42,16 @@ interface ManagerPanelProps {
   updateReport: (userId: string, date: string, updates: Partial<DailyReport>) => void;
   addMessage: (text: string, recipientId?: string) => void;
   markMessageAsRead: (messageId: string) => void;
-  activeTab: 'overview' | 'users' | 'reports' | 'approvals' | 'messages' | 'simcards' | 'monitoring';
-  setActiveTab: (tab: 'overview' | 'users' | 'reports' | 'approvals' | 'messages' | 'simcards' | 'monitoring') => void;
+  activeTab: 'overview' | 'users' | 'reports' | 'approvals' | 'messages' | 'simcards' | 'monitoring' | 'rating';
+  setActiveTab: (tab: 'overview' | 'users' | 'reports' | 'approvals' | 'messages' | 'simcards' | 'monitoring' | 'rating') => void;
   addSimInventory: (company: string, count: number) => void;
   setMonthlyTarget: (month: string, targets: Record<string, number>, officeCounts?: Record<string, number>, mobileOfficeCounts?: Record<string, number>) => void;
   addTariff: (company: string, tariff: string) => void;
   removeTariff: (company: string, tariff: string) => void;
+  setRatingThresholds?: (thresholds: any) => void;
   isDarkMode: boolean;
   language: 'uz' | 'ru' | 'en';
+  calculateAchievements: (force?: boolean) => void;
 }
 
 
@@ -187,179 +192,11 @@ const PhotoViewer: React.FC<{ photo: string; onClose: () => void }> = ({ photo, 
   </div>
 );
 
-const StaffMap: React.FC<{ checkIns: CheckIn[], reports: DailyReport[], users: User[], today: string, onUserSelect: (userId: string) => void, isDarkMode: boolean, language: Language }> = ({ checkIns, reports, users, today, onUserSelect, isDarkMode, language }) => {
-  const mapRef = useRef<HTMLDivElement>(null);
-  const leafletMap = useRef<L.Map | null>(null);
-  const markersGroup = useRef<L.LayerGroup | null>(null);
 
-  const operators = useMemo(() => users.filter(u => u.isApproved && u.role !== Role.MANAGER), [users]);
 
-  const staffStatus = useMemo(() => {
-    return operators.map(user => {
-      const userCheckIns = checkIns
-        .filter(ci => ci.userId === user.id)
-        .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
-      
-      const lastKnownLocation = userCheckIns[0];
-      const todayCheckIn = userCheckIns.find(ci => isDateMatch(ci.timestamp, today));
-      const todayReport = reports.find(r => r.userId === user.id && r.date === today);
-      
-      return { user, todayCheckIn, todayReport, lastKnownLocation, isPresent: !!todayCheckIn, hasFinished: !!todayReport };
-    });
-  }, [operators, checkIns, reports, today]);
-
-  const fitToMarkers = () => {
-    if (leafletMap.current && markersGroup.current) {
-      const layers = markersGroup.current.getLayers();
-      if (layers.length > 0) {
-        const boundsArr = layers.map((l: any) => l.getLatLng());
-        leafletMap.current.fitBounds(L.latLngBounds(boundsArr as any), { padding: [80, 80], maxZoom: 14 });
-      }
-    }
-  };
-
-  useEffect(() => {
-    if (mapRef.current && !leafletMap.current) {
-      leafletMap.current = L.map(mapRef.current, { scrollWheelZoom: true, dragging: true, zoomControl: false }).setView([41.311081, 69.240562], 12);
-      
-      const tileUrl = isDarkMode 
-        ? 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png'
-        : 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png';
-        
-      L.tileLayer(tileUrl, { attribution: '&copy; CARTO', maxZoom: 20 }).addTo(leafletMap.current);
-      L.control.zoom({ position: 'bottomright' }).addTo(leafletMap.current);
-      markersGroup.current = L.layerGroup().addTo(leafletMap.current);
-      
-      setTimeout(() => {
-        leafletMap.current?.invalidateSize();
-      }, 250);
-
-      const resizeObserver = new ResizeObserver(() => {
-        leafletMap.current?.invalidateSize();
-      });
-      resizeObserver.observe(mapRef.current);
-      return () => {
-        resizeObserver.disconnect();
-        if (leafletMap.current) {
-          leafletMap.current.remove();
-          leafletMap.current = null;
-        }
-      };
-    }
-  }, []);
-
-  useEffect(() => {
-    if (leafletMap.current) {
-      leafletMap.current.eachLayer((layer) => {
-        if (layer instanceof L.TileLayer) {
-          leafletMap.current?.removeLayer(layer);
-        }
-      });
-      const tileUrl = isDarkMode 
-        ? 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png'
-        : 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png';
-      L.tileLayer(tileUrl, { maxZoom: 20 }).addTo(leafletMap.current);
-    }
-  }, [isDarkMode]);
-
-  useEffect(() => {
-    if (leafletMap.current && markersGroup.current) {
-      markersGroup.current.clearLayers();
-      staffStatus.forEach(({ user, lastKnownLocation, todayCheckIn, isPresent, hasFinished }) => {
-        if (!lastKnownLocation?.location) return;
-        const lateness = todayCheckIn ? getLatenessStatus(todayCheckIn.timestamp, user.workingHours) : null;
-        let statusColor = isPresent ? (hasFinished ? '#64748b' : (lateness?.isEarly ? '#3b82f6' : '#2563eb')) : '#ef4444';
-        let statusLabel = isPresent ? (hasFinished ? t(language, 'finished') : (lateness?.isEarly ? t(language, 'early_arrival') : t(language, 'at_work'))) : t(language, 'not_come');
-        const initials = `${user.firstName?.[0] || ''}${user.lastName?.[0] || ''}`.toUpperCase();
-
-        const customIcon = L.divIcon({
-          className: 'custom-staff-icon-marker',
-          html: `
-            <div class="map-marker-v2-container ${isPresent && !hasFinished ? 'marker-pulse-v2' : ''} ${lateness?.isLate ? 'marker-late-v2' : ''} ${lateness?.isEarly ? 'marker-early-v2' : ''}" style="opacity: ${isPresent ? '1' : '0.8'}">
-              <div class="map-marker-v2-pin" style="background-color: ${statusColor}; ${lateness?.isLate ? 'border-color: #ef4444; border-width: 3px;' : (lateness?.isEarly ? 'border-color: #3b82f6; border-width: 3px;' : '')}">
-                <span class="map-marker-v2-initials">${initials}</span>
-              </div>
-              <div class="map-marker-v2-arrow" style="border-top-color: ${lateness?.isLate ? '#ef4444' : (lateness?.isEarly ? '#3b82f6' : statusColor)}"></div>
-              ${lateness?.isLate ? '<div class="late-badge-v2">!</div>' : ''}
-              ${lateness?.isEarly ? '<div class="early-badge-v2">&#10003;</div>' : ''}
-            </div>
-          `,
-          iconSize: [36, 46], 
-          iconAnchor: [18, 46], 
-          popupAnchor: [0, -40]
-        });
-        
-        const latenessHtml = lateness?.isLate ? 
-          `<div style="color: white; font-weight: 900; background: #ef4444; padding: 4px 10px; border-radius: 8px; margin-top: 8px; box-shadow: 0 4px 10px rgba(239, 68, 68, 0.2); font-size: 10px; display: flex; align-items: center; gap: 6px; text-transform: uppercase;">
-            <span style="font-size: 14px;">🚨</span> LATE: ${lateness.durationStr}
-          </div>` : (lateness?.isEarly ? 
-          `<div style="color: white; font-weight: 900; background: #3b82f6; padding: 4px 10px; border-radius: 8px; margin-top: 8px; box-shadow: 0 4px 10px rgba(59, 130, 246, 0.2); font-size: 10px; display: flex; align-items: center; gap: 6px; text-transform: uppercase;">
-            <span style="font-size: 14px;">✅</span> EARLY: ${lateness.durationStr}
-          </div>` : '');
-
-        const marker = L.marker([lastKnownLocation.location.lat, lastKnownLocation.location.lng], { icon: customIcon })
-          .bindTooltip(`<div class="map-tooltip-content" style="padding: 10px; min-width: 140px;">
-            <span class="tooltip-name" style="font-weight: 900; color: #1e293b; font-size: 15px; display: block; margin-bottom: 6px; letter-spacing: -0.02em;">${user.firstName} ${user.lastName}</span>
-            <div class="tooltip-status" style="display: flex; align-items: center; gap: 8px;">
-              <span class="status-dot" style="width: 10px; height: 10px; border-radius: 50%; background-color: ${statusColor}; box-shadow: 0 0 0 3px ${statusColor}33"></span>
-              <span class="status-text" style="color: ${statusColor}; font-weight: 900; font-size: 12px; text-transform: uppercase; letter-spacing: 0.05em;">${statusLabel}</span>
-            </div>
-            ${latenessHtml}
-          </div>`, { direction: 'top', offset: [0, -40], className: 'map-custom-tooltip' });
-          
-        marker.on('click', () => {
-          onUserSelect(user.id);
-        });
-
-        marker.addTo(markersGroup.current!);
-      });
-      fitToMarkers();
-    }
-  }, [staffStatus, onUserSelect]);
-
-  return (
-    <div className="relative w-full h-full rounded-[2.5rem] overflow-hidden border border-white/10 shadow-2xl bg-brand-dark flex flex-col md:flex-row">
-      <div className="w-full md:w-64 bg-brand-black/90 backdrop-blur-md border-r border-white/10 overflow-y-auto custom-scrollbar p-4 z-20">
-        <h4 className="text-[10px] font-black text-white/30 uppercase tracking-widest mb-4">{t(language, 'staff_count')} ({staffStatus.length})</h4>
-        <div className="space-y-2">
-          {staffStatus.map(({ user, todayCheckIn, isPresent, hasFinished }) => {
-            const lateness = todayCheckIn ? getLatenessStatus(todayCheckIn.timestamp, user.workingHours) : null;
-            return (
-              <div 
-                key={user.id} 
-                onClick={() => onUserSelect(user.id)}
-                className={`p-2.5 rounded-xl border transition-all flex items-center gap-3 shadow-sm hover:shadow-md cursor-pointer ${lateness?.isLate ? 'bg-red-500/10 border-red-500/20' : (lateness?.isEarly ? 'bg-brand-gold/10 border-brand-gold/20' : 'bg-brand-black border-white/10')}`}
-              >
-                <div className={`w-8 h-8 rounded-lg flex items-center justify-center font-black text-[10px] ${isPresent ? (lateness?.isLate ? 'bg-red-600 text-white' : (lateness?.isEarly ? 'bg-brand-gold text-brand-black' : 'bg-brand-gold/20 text-brand-gold')) : 'bg-red-500/10 text-red-400'} overflow-hidden`}>
-                  {user.photo ? (
-                    <img src={user.photo} alt={user.firstName} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
-                  ) : (
-                    <>{user.firstName?.[0]}</>
-                  )}
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-xs font-bold text-white truncate leading-none mb-1">{user.firstName} {user.lastName}</p>
-                  <div className="flex items-center gap-1.5">
-                    <p className="text-[8px] font-black text-white/50 uppercase tracking-wider">{isPresent ? (hasFinished ? t(language, 'finished') : (lateness?.isEarly ? t(language, 'early_arrival') : t(language, 'at_work'))) : t(language, 'not_come')}</p>
-                    {lateness?.isLate && <span className="text-[8px] bg-red-600 text-white px-1.5 py-0.5 rounded-md font-black animate-pulse shadow-sm shadow-red-200">LATE</span>}
-                    {lateness?.isEarly && <span className="text-[8px] bg-blue-600 text-white px-1.5 py-0.5 rounded-md font-black animate-pulse shadow-sm shadow-blue-200">EARLY</span>}
-                  </div>
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      </div>
-      <div className="flex-1 relative">
-        <div ref={mapRef} className="w-full h-full min-h-[400px] z-10" />
-        <button onClick={fitToMarkers} className="absolute top-4 right-4 z-[20] p-3 bg-brand-black/95 rounded-xl shadow-lg border border-white/10 text-brand-gold active:scale-95 transition-all"><Navigation2 className="w-4 h-4 fill-current" /></button>
-      </div>
-    </div>
-  );
-};
-
-const ManagerPanel: React.FC<ManagerPanelProps> = ({ state, approveUser, updateUser, updateCheckIn, updateReport, addMessage, markMessageAsRead, activeTab, setActiveTab, addSimInventory, setMonthlyTarget, addTariff, removeTariff, isDarkMode, language }) => {
+const ManagerPanel: React.FC<ManagerPanelProps> = ({ state, approveUser, updateUser, updateCheckIn, updateReport, addMessage, markMessageAsRead, activeTab, setActiveTab, addSimInventory, setMonthlyTarget, addTariff, removeTariff, isDarkMode, language, calculateAchievements }) => {
   const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
+  const [mapSelectedUserId, setMapSelectedUserId] = useState<string | null>(null);
   const [selectedDay, setSelectedDay] = useState<string | null>(null);
   const [editingTime, setEditingTime] = useState<{ type: 'checkIn' | 'checkOut', current: string } | null>(null);
   const [newTime, setNewTime] = useState('');
@@ -367,6 +204,15 @@ const ManagerPanel: React.FC<ManagerPanelProps> = ({ state, approveUser, updateU
   const [tempStartTime, setTempStartTime] = useState('');
   const [tempEndTime, setTempEndTime] = useState('');
   const [searchTerm, setSearchTerm] = useState('');
+  const [ratingTimeframe, setRatingTimeframe] = useState<'today' | 'week' | 'month' | 'custom'>('month');
+  const [ratingMonthOffset, setRatingMonthOffset] = useState(0);
+  const [ratingCustomStart, setRatingCustomStart] = useState(getTodayStr());
+  const [ratingCustomEnd, setRatingCustomEnd] = useState(getTodayStr());
+  const [ratingMode, setRatingMode] = useState('overall');
+  const [isLeagueModalOpen, setIsLeagueModalOpen] = useState(false);
+  const [isLeagueDropdownOpen, setIsLeagueDropdownOpen] = useState(false);
+  const [isOperatorDropdownOpen, setIsOperatorDropdownOpen] = useState(false);
+  const [leagueForm, setLeagueForm] = useState<{ league: 'gold' | 'silver' | 'bronze', userId: string }>({ league: 'gold', userId: '' });
   const [chartTimeframe, setChartTimeframe] = useState<'week' | 'month' | 'year'>('week');
   const [selectedYear, setSelectedYear] = useState<number>(new Date().getFullYear());
   const [weekOffset, setWeekOffset] = useState<number>(0);
@@ -385,6 +231,9 @@ const ManagerPanel: React.FC<ManagerPanelProps> = ({ state, approveUser, updateU
   const [monitoringMonthOffset, setMonitoringMonthOffset] = useState(0);
   const [monitoringYear, setMonitoringYear] = useState(new Date().getFullYear());
   const [monitoringSelectedDay, setMonitoringSelectedDay] = useState<string | null>(null);
+  const [isWorkPointModalOpen, setIsWorkPointModalOpen] = useState(false);
+  const [workPointForm, setWorkPointForm] = useState<{ userId: string, location: { lat: number, lng: number } | null, radius: number, workType: 'office' | 'mobile' | 'desk' }>({ userId: '', location: null, radius: 200, workType: 'office' });
+  const [isWorkPointOperatorDropdownOpen, setIsWorkPointOperatorDropdownOpen] = useState(false);
 
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 5;
@@ -522,7 +371,8 @@ const ManagerPanel: React.FC<ManagerPanelProps> = ({ state, approveUser, updateU
       const d = new Date();
       d.setDate(1);
       d.setMonth(d.getMonth() + monthOffset);
-      return d.toLocaleDateString('uz-UZ', { month: 'long', year: 'numeric' });
+      const monthName = translations[language].month_names[d.getMonth()];
+      return `${monthName} ${d.getFullYear()}`;
     }
     if (chartTimeframe === 'year') return `${t(language, 'yearly')} - ${selectedYear}`;
     return '';
@@ -812,7 +662,7 @@ const ManagerPanel: React.FC<ManagerPanelProps> = ({ state, approveUser, updateU
           </div>
         </div>
       )}
-      
+
       {activeTab === 'overview' && (
         <div className="space-y-8 animate-in fade-in duration-500">
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -946,12 +796,42 @@ const ManagerPanel: React.FC<ManagerPanelProps> = ({ state, approveUser, updateU
             </div>
           </section>
 
-          <div className="bg-brand-dark p-4 rounded-3xl shadow-sm border border-white/10 h-[650px] flex flex-col">
-            <div className="p-2 mb-2 border-b border-white/5 flex items-center justify-between">
-              <h3 className="text-base font-black text-white flex items-center gap-2"><MapPin className="w-4 h-4 text-brand-gold" /> Jonli Monitoring</h3>
-              <span className="text-[9px] font-black text-white/30 uppercase tracking-widest">{today}</span>
+          <div className="bg-brand-dark p-4 rounded-3xl shadow-sm border border-white/10 h-[650px] flex gap-4">
+            <div className="w-64 border-r border-white/5 overflow-y-auto p-2 scrollbar-hide no-scrollbar">
+              <h3 className="text-base font-black text-white mb-4">Operatorlar</h3>
+              <div className="space-y-3">
+                {operators.map(op => (
+                  <div
+                    key={op.id}
+                    onClick={() => setMapSelectedUserId(op.id)}
+                    className={`group w-full text-left p-4 rounded-2xl text-sm font-medium transition-all duration-300 border cursor-pointer flex justify-between items-center ${mapSelectedUserId === op.id ? 'bg-brand-gold text-brand-black border-brand-gold shadow-lg shadow-brand-gold/20' : 'bg-white/5 text-white/80 border-white/10 hover:bg-white/10 hover:border-white/20'}`}
+                  >
+                    <span className="truncate font-semibold">{op.firstName} {op.lastName}</span>
+                    <button 
+                      onClick={(e) => { e.stopPropagation(); setSelectedUserId(op.id); }}
+                      className={`p-2 rounded-xl transition-all ${mapSelectedUserId === op.id ? 'bg-brand-black/10 hover:bg-brand-black/20 text-brand-black' : 'bg-white/5 hover:bg-white/10 text-white/60 group-hover:text-white'}`}
+                    >
+                      <Edit className="w-4 h-4" />
+                    </button>
+                  </div>
+                ))}
+              </div>
             </div>
-            <div className="flex-1 overflow-hidden"><StaffMap checkIns={state.checkIns} reports={state.reports} users={state.users} today={today} onUserSelect={setSelectedUserId} isDarkMode={isDarkMode} language={language} /></div>
+            <div className="flex-1 flex flex-col overflow-hidden">
+              <div className="p-2 mb-2 border-b border-white/5 flex items-center justify-between">
+                <h3 className="text-base font-black text-white flex items-center gap-2"><MapPin className="w-4 h-4 text-brand-gold" /> Jonli Monitoring</h3>
+                <div className="flex items-center gap-4">
+                  <span className="text-[10px] font-black text-white/40 uppercase tracking-widest">{new Date().toISOString().slice(0, 10)}</span>
+                  <button 
+                    onClick={() => setIsWorkPointModalOpen(true)}
+                    className="flex items-center gap-2 px-4 py-2 bg-brand-gold text-brand-black text-[10px] font-black uppercase tracking-widest rounded-xl hover:scale-[1.02] active:scale-95 transition-all shadow-lg shadow-brand-gold/20"
+                  >
+                    <PlusCircle className="w-4 h-4" /> Ish nuqtasini kiritish
+                  </button>
+                </div>
+              </div>
+              <div className="flex-1 overflow-hidden"><StaffMap className="h-full" checkIns={state.checkIns} reports={state.reports} users={state.users} today={today} onUserSelect={setMapSelectedUserId} selectedUserId={mapSelectedUserId || undefined} isDarkMode={isDarkMode} language={language} /></div>
+            </div>
           </div>
         </div>
       )}
@@ -1257,9 +1137,11 @@ const ManagerPanel: React.FC<ManagerPanelProps> = ({ state, approveUser, updateU
         <div className="space-y-6 animate-in fade-in">
           <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
             <h2 className="text-2xl font-black text-white">{t(language, 'staff_team')}</h2>
-            <div className="relative w-full md:w-96">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-white/30" />
-              <input type="text" placeholder="Xodimni qidirish..." className="w-full pl-10 pr-4 py-3 border border-white/10 rounded-2xl bg-brand-black focus:border-brand-gold transition outline-none text-white font-bold" value={searchTerm} onChange={e => setSearchTerm(e.target.value)} />
+            <div className="flex items-center gap-4 w-full md:w-auto">
+              <div className="relative w-full md:w-96">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-white/30" />
+                <input type="text" placeholder="Xodimni qidirish..." className="w-full pl-10 pr-4 py-3 border border-white/10 rounded-2xl bg-brand-black focus:border-brand-gold transition outline-none text-white font-bold" value={searchTerm} onChange={e => setSearchTerm(e.target.value)} />
+              </div>
             </div>
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
@@ -1378,6 +1260,45 @@ const ManagerPanel: React.FC<ManagerPanelProps> = ({ state, approveUser, updateU
                                 className="time-picker-input w-full p-3 bg-brand-black rounded-xl text-sm font-bold text-white border border-white/10 focus:border-brand-gold outline-none relative"
                               />
                             </div>
+                            <div>
+                              <label className="text-[10px] font-black text-white/30 uppercase tracking-widest block mb-1.5">Bo'lim (Department)</label>
+                              <select 
+                                value={selectedUser.department || ''}
+                                onChange={(e) => updateUser(selectedUser.id, { department: e.target.value })}
+                                className="w-full p-3 bg-brand-black rounded-xl text-sm font-bold text-white border border-white/10 focus:border-brand-gold outline-none mb-4"
+                              >
+                                <option value="">Bo'lim tanlang</option>
+                                <option value="Sotuv bo'limi">Sotuv bo'limi</option>
+                                <option value="Call markaz">Call markaz</option>
+                                <option value="Dilerlik">Dilerlik</option>
+                                <option value="B2B">B2B</option>
+                              </select>
+
+                              <label className="text-[10px] font-black text-white/30 uppercase tracking-widest block mb-1.5">Ish nuqtasi (Xaritadan tanlang)</label>
+                              <MapPicker 
+                                lat={selectedUser.workLocation?.lat || 0} 
+                                lng={selectedUser.workLocation?.lng || 0} 
+                                onChange={(lat, lng) => {
+                                  updateUser(selectedUser.id, { 
+                                    workLocation: { lat, lng } 
+                                  });
+                                }} 
+                              />
+                              <div className="mt-2 mb-4 text-[10px] text-white/40 font-medium">
+                                {selectedUser.workLocation?.lat ? `${selectedUser.workLocation.lat.toFixed(6)}, ${selectedUser.workLocation.lng.toFixed(6)}` : 'Nuqta tanlanmagan'}
+                              </div>
+
+                              <label className="text-[10px] font-black text-white/30 uppercase tracking-widest block mb-1.5">Liga (Reyting)</label>
+                              <select 
+                                value={selectedUser.league || 'bronze'}
+                                onChange={(e) => updateUser(selectedUser.id, { league: e.target.value as 'gold' | 'silver' | 'bronze' })}
+                                className="w-full p-3 bg-brand-black rounded-xl text-sm font-bold text-white border border-white/10 focus:border-brand-gold outline-none"
+                              >
+                                <option value="gold">Gold</option>
+                                <option value="silver">Silver</option>
+                                <option value="bronze">Bronze</option>
+                              </select>
+                            </div>
                             <button
                               onClick={() => {
                                 if (tempStartTime && tempEndTime) {
@@ -1410,7 +1331,7 @@ const ManagerPanel: React.FC<ManagerPanelProps> = ({ state, approveUser, updateU
                   </div>
                 </div>
 
-                <div className="flex-1 overflow-y-auto p-4 md:p-8 space-y-8 custom-scrollbar bg-brand-black">
+                <div className="flex-1 overflow-y-auto p-4 md:p-8 space-y-8 custom-scrollbar no-scrollbar bg-brand-black">
                   <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
                     <RefinedStatCard 
                       label={t(language, 'today_sales')} 
@@ -1628,7 +1549,11 @@ const ManagerPanel: React.FC<ManagerPanelProps> = ({ state, approveUser, updateU
                           <div className="flex items-center gap-3 w-full md:w-auto">
                             <div className="p-2.5 bg-brand-gold/10 rounded-xl text-brand-gold"><Smartphone className="w-5 h-5" /></div>
                             <h3 className="text-lg font-black text-white tracking-tight">
-                              {selectedDay ? (chartTimeframe === 'year' ? `${new Date(selectedDay).toLocaleDateString(language === 'uz' ? 'uz-UZ' : language === 'ru' ? 'ru-RU' : 'en-US', { month: 'long', year: 'numeric' })} ${t(language, 'monthly_sales_title')}` : `${selectedDay} ${t(language, 'daily_sales_title')}`) : (chartTimeframe === 'month' ? `${chartTitleLabel} ${t(language, 'monthly_sales_title')}` : `${today} ${t(language, 'daily_sales_title')}`)}
+                              {selectedDay ? (chartTimeframe === 'year' ? `${(() => {
+                                const d = new Date(selectedDay);
+                                const monthName = translations[language].month_names[d.getMonth()];
+                                return `${monthName} ${d.getFullYear()}`;
+                              })()} ${t(language, 'monthly_sales_title')}` : `${selectedDay} ${t(language, 'daily_sales_title')}`) : (chartTimeframe === 'month' ? `${chartTitleLabel} ${t(language, 'monthly_sales_title')}` : `${today} ${t(language, 'daily_sales_title')}`)}
                             </h3>
                           </div>
                           
@@ -2737,6 +2662,552 @@ const ManagerPanel: React.FC<ManagerPanelProps> = ({ state, approveUser, updateU
           </div>
         </div>
       )}
+
+      {activeTab === 'rating' && (
+        <div className="space-y-8 animate-in fade-in slide-in-from-bottom-8 duration-1000 max-w-[1400px] mx-auto py-8 px-4">
+          {/* Header & Filters */}
+          <div className="flex flex-col gap-6 border-b border-white/10 pb-8">
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
+              <div className="space-y-2">
+                <div className="flex items-center gap-2 text-brand-gold font-bold text-[10px] uppercase tracking-[0.2em]">
+                  <Trophy className="w-4 h-4" />
+                  <span>Reyting</span>
+                </div>
+                <h2 className="text-4xl font-extrabold text-white tracking-tight">
+                  Operatorlar <span className="text-brand-gold">Reytingi</span>
+                </h2>
+              </div>
+              
+              {/* Timeframe Filters */}
+              <div className="flex flex-col gap-3 items-end">
+                <div className="flex items-center gap-2 bg-brand-black p-1.5 rounded-2xl border border-white/10 overflow-x-auto">
+                  {[
+                    { id: 'today', label: 'Bugun' },
+                    { id: 'week', label: 'Hafta' },
+                    { id: 'month', label: 'Oy' },
+                    { id: 'custom', label: 'Oraliq' }
+                  ].map(t => (
+                    <button
+                      key={t.id}
+                      onClick={() => setRatingTimeframe(t.id as any)}
+                      className={`px-4 py-2 rounded-xl text-xs font-bold uppercase tracking-wider whitespace-nowrap transition-all ${ratingTimeframe === t.id ? 'bg-brand-gold text-brand-black shadow-md' : 'text-white/40 hover:text-white hover:bg-white/5'}`}
+                    >
+                      {t.label}
+                    </button>
+                  ))}
+                </div>
+                
+                <div className="flex items-center gap-3">
+                  {/* Only show Saralash button if viewing current month or a non-month view */}
+                  {/* If viewing a past month (offset < 0), hide or disable it */}
+                  {(ratingTimeframe !== 'month' || ratingMonthOffset === 0) && (
+                    <button 
+                      onClick={() => setIsLeagueModalOpen(true)}
+                      className="px-4 py-2 bg-brand-dark border border-white/10 rounded-xl text-white/60 hover:text-brand-gold hover:border-brand-gold/30 transition-all flex items-center gap-2 text-[10px] font-black uppercase tracking-widest"
+                    >
+                      <Trophy className="w-3 h-3" />
+                      Saralash
+                    </button>
+                  )}
+
+                  <button 
+                    onClick={() => {
+                      console.log("Recalculate button clicked");
+                      if (calculateAchievements) {
+                        calculateAchievements(true);
+                      } else {
+                        alert("Xatolik: Hisoblash funksiyasi topilmadi.");
+                      }
+                    }}
+                    className="px-4 py-2 bg-brand-dark border border-white/10 rounded-xl text-white/60 hover:text-green-500 hover:border-green-500/30 transition-all flex items-center gap-2 text-[10px] font-black uppercase tracking-widest cursor-pointer"
+                    title="O'tgan oy yutuqlarini qayta hisoblash"
+                  >
+                    <RotateCcw className="w-3 h-3" />
+                    Qayta hisoblash
+                  </button>
+
+                  {ratingTimeframe === 'month' && (
+                    <div className="flex items-center gap-1 bg-brand-dark p-1 rounded-xl border border-white/5 shadow-sm">
+                      <button 
+                        onClick={() => {
+                          const d = new Date();
+                          d.setMonth(d.getMonth() + ratingMonthOffset - 1);
+                          // Limit: Site started in Feb 2026
+                          if (d.getFullYear() < 2026 || (d.getFullYear() === 2026 && d.getMonth() < 1)) return;
+                          setRatingMonthOffset(prev => prev - 1);
+                        }} 
+                        className={`p-2 rounded-lg transition-colors ${(() => {
+                          const d = new Date();
+                          d.setMonth(d.getMonth() + ratingMonthOffset - 1);
+                          const isDisabled = d.getFullYear() < 2026 || (d.getFullYear() === 2026 && d.getMonth() < 1);
+                          return isDisabled ? 'text-white/10 cursor-not-allowed' : 'text-white/40 hover:text-brand-gold hover:bg-white/5';
+                        })()}`}
+                      >
+                        <ChevronLeft className="w-4 h-4" />
+                      </button>
+                      <span className="text-[10px] font-black text-white/60 px-4 uppercase tracking-widest min-w-[120px] text-center">
+                        {(() => {
+                          const d = new Date();
+                          d.setMonth(d.getMonth() + ratingMonthOffset);
+                          const monthName = translations[language].month_names[d.getMonth()];
+                          return `${monthName} ${d.getFullYear()}`;
+                        })()}
+                      </span>
+                      <button 
+                        onClick={() => {
+                          if (ratingMonthOffset >= 0) return; // Limit: Cannot go to future months
+                          setRatingMonthOffset(prev => prev + 1);
+                        }} 
+                        className={`p-2 rounded-lg transition-colors ${ratingMonthOffset >= 0 ? 'text-white/10 cursor-not-allowed' : 'text-white/40 hover:text-brand-gold hover:bg-white/5'}`}
+                      >
+                        <ChevronRight className="w-4 h-4" />
+                      </button>
+                    </div>
+                  )}
+                  
+                  {ratingTimeframe === 'custom' && (
+                    <div className="flex items-center gap-2">
+                      <input type="date" value={ratingCustomStart} onChange={e => setRatingCustomStart(e.target.value)} className="bg-brand-black border border-white/10 text-white text-xs p-2 rounded-lg outline-none focus:border-brand-gold" />
+                      <span className="text-white/40">-</span>
+                      <input type="date" value={ratingCustomEnd} onChange={e => setRatingCustomEnd(e.target.value)} className="bg-brand-black border border-white/10 text-white text-xs p-2 rounded-lg outline-none focus:border-brand-gold" />
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {/* Mode Tabs */}
+            <div className="flex items-center gap-2 overflow-x-auto pb-2">
+              {['overall', 'Ucell', 'Uztelecom', 'Mobiuz', 'Beeline'].map(mode => (
+                <button
+                  key={mode}
+                  onClick={() => setRatingMode(mode as any)}
+                  className={`px-6 py-3 rounded-2xl text-sm font-black uppercase tracking-widest whitespace-nowrap transition-all border ${ratingMode === mode ? 'bg-brand-gold/10 border-brand-gold text-brand-gold shadow-[0_0_15px_rgba(255,215,0,0.1)]' : 'bg-brand-black border-white/5 text-white/40 hover:text-white hover:bg-white/5'}`}
+                >
+                  {mode === 'overall' ? 'Umumiy' : mode}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {(() => {
+            let startDate = new Date();
+            let endDate = new Date();
+            if (ratingTimeframe === 'today') {
+              startDate = new Date(today);
+              endDate = new Date(today);
+            } else if (ratingTimeframe === 'week') {
+              const d = new Date(today);
+              const day = d.getDay();
+              const diff = d.getDate() - day + (day === 0 ? -6 : 1);
+              startDate = new Date(d.setDate(diff));
+              endDate = new Date(startDate);
+              endDate.setDate(endDate.getDate() + 6);
+            } else if (ratingTimeframe === 'month') {
+              const d = new Date();
+              d.setMonth(d.getMonth() + ratingMonthOffset);
+              startDate = new Date(d.getFullYear(), d.getMonth(), 1);
+              endDate = new Date(d.getFullYear(), d.getMonth() + 1, 0);
+            } else if (ratingTimeframe === 'custom') {
+              startDate = new Date(ratingCustomStart);
+              endDate = new Date(ratingCustomEnd);
+            }
+            startDate.setHours(0, 0, 0, 0);
+            endDate.setHours(23, 59, 59, 999);
+
+            const operatorRankings = state.users
+              .filter(u => u.role !== 'manager')
+              .map(u => {
+                // Determine historical league based on endDate
+                let historicalLeague = u.league || 'bronze';
+                if (u.leagueHistory && u.leagueHistory.length > 0) {
+                   const sorted = [...u.leagueHistory].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+                   const match = sorted.find(h => new Date(h.date) <= endDate);
+                   if (match) {
+                     historicalLeague = match.league;
+                   } else {
+                     // Before any history (and likely before creation), default to bronze
+                     historicalLeague = 'bronze';
+                   }
+                }
+
+                // Filter sales based on timeframe and mode
+                const userSales = state.sales.filter(s => {
+                  const saleDate = new Date(s.date);
+                  // Reset time part to compare dates correctly
+                  const sDate = new Date(saleDate.getFullYear(), saleDate.getMonth(), saleDate.getDate());
+                  const start = new Date(startDate.getFullYear(), startDate.getMonth(), startDate.getDate());
+                  const end = new Date(endDate.getFullYear(), endDate.getMonth(), endDate.getDate());
+                  
+                  const inRange = sDate >= start && sDate <= end;
+                  
+                  if (ratingMode === 'overall') return s.userId === u.id && inRange;
+                  return s.userId === u.id && inRange && s.company === ratingMode;
+                });
+
+                const totalSales = userSales.reduce((acc, s) => acc + s.count + s.bonus, 0);
+                return { ...u, sales: totalSales, historicalLeague };
+              })
+              .sort((a, b) => b.sales - a.sales);
+
+            return (
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mt-8 items-start">
+                {['gold', 'silver', 'bronze'].map((leagueName) => {
+                  // Filter users belonging to this league using historical data
+                  const groupUsers = operatorRankings.filter(u => {
+                    const userLeague = u.historicalLeague;
+                    return userLeague === leagueName;
+                  });
+                  
+                  const leagueInfo = leagueName === 'gold' 
+                    ? { color: 'text-yellow-400', bg: 'bg-yellow-400/10', title: "1 Gold", border: 'border-yellow-400/20' }
+                    : leagueName === 'silver'
+                    ? { color: 'text-gray-300', bg: 'bg-gray-300/10', title: "2 Silver", border: 'border-gray-300/20' }
+                    : { color: 'text-orange-500', bg: 'bg-orange-500/10', title: "3 Bronza", border: 'border-orange-500/20' };
+
+                  return (
+                    <div key={leagueName} className={`bg-brand-dark rounded-[2rem] border ${leagueInfo.border} shadow-2xl overflow-hidden flex flex-col max-h-[800px]`}>
+                      <div className={`px-6 py-5 border-b border-white/10 flex items-center justify-between ${leagueInfo.bg}`}>
+                        <div className="flex items-center gap-3">
+                          <Trophy className={`w-5 h-5 ${leagueInfo.color}`} />
+                          <span className={`text-sm font-black uppercase tracking-[0.2em] ${leagueInfo.color}`}>{leagueInfo.title}</span>
+                        </div>
+                        <span className="text-[10px] font-black text-white/40 uppercase tracking-widest">{groupUsers.length} ta operator</span>
+                      </div>
+                      <div className="divide-y divide-white/5 flex-1 overflow-y-auto">
+                        {groupUsers.length === 0 ? (
+                          <div className="p-8 text-center text-white/20 text-xs font-bold uppercase tracking-widest">Operatorlar yo'q</div>
+                        ) : groupUsers.map((u, idx) => {
+                          return (
+                            <div key={u.id} className={`px-6 py-5 flex items-center justify-between hover:bg-white/5 transition-colors group`}>
+                              <div className="flex items-center gap-4">
+                                <span className="w-5 text-center font-bold text-white/20 group-hover:text-brand-gold transition-colors">{idx + 1}</span>
+                                <div className="w-10 h-10 rounded-xl bg-brand-black border border-white/5 flex items-center justify-center font-bold text-white/20 text-xs group-hover:scale-110 group-hover:bg-brand-dark transition-all overflow-hidden">
+                                  {u.photo ? <img src={u.photo} alt={u.firstName} className="w-full h-full object-cover" /> : <>{u.firstName?.[0]}{u.lastName?.[0]}</>}
+                                </div>
+                                <div>
+                                  <p className="font-bold text-white flex items-center gap-2 text-sm">
+                                    {u.firstName} {u.lastName}
+                                  </p>
+                                  <p className="text-[9px] font-medium text-white/40">{u.department || 'Bo\'limsiz'}</p>
+                                </div>
+                              </div>
+                              <div className="flex items-center gap-4">
+                                <div className="text-right min-w-[50px]">
+                                  <p className="text-base font-black text-white">{u.sales}</p>
+                                  <p className="text-[8px] font-black text-white/40 uppercase tracking-widest">Sotuv</p>
+                                </div>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            );
+          })()}
+
+          {isLeagueModalOpen && (
+            <div className="fixed inset-0 z-[200] flex items-center justify-center animate-in fade-in duration-300 p-4">
+              <div className="absolute inset-0 bg-black/60 backdrop-blur-xl" onClick={() => setIsLeagueModalOpen(false)}></div>
+              <div className="bg-brand-black w-full max-w-5xl rounded-[2rem] shadow-2xl relative z-10 overflow-hidden flex flex-col border border-white/10 max-h-[90vh]">
+                <div className="p-6 border-b border-white/10 flex items-center justify-between bg-brand-dark">
+                  <h2 className="text-xl font-black text-white flex items-center gap-2">
+                    <Trophy className="w-5 h-5 text-brand-gold" /> Operatorlarni Saralash
+                  </h2>
+                  <button onClick={() => setIsLeagueModalOpen(false)} className="p-2 bg-red-500/10 text-red-500 rounded-full hover:bg-red-500 hover:text-white transition-all"><X className="w-5 h-5" /></button>
+                </div>
+                
+                <div className="p-8 overflow-y-auto space-y-8 custom-scrollbar">
+                  {/* Form */}
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-6 items-end">
+                    <div className="space-y-2 relative">
+                      <label className="text-[10px] font-black text-white/30 uppercase tracking-widest ml-1">Liga (Bo'lim)</label>
+                      <button 
+                        onClick={() => {
+                          setIsLeagueDropdownOpen(!isLeagueDropdownOpen);
+                          setIsOperatorDropdownOpen(false);
+                        }}
+                        className={`w-full p-4 bg-brand-dark border ${isLeagueDropdownOpen ? 'border-brand-gold ring-1 ring-brand-gold/50' : 'border-white/10'} rounded-xl text-sm font-bold text-white flex items-center justify-between transition-all hover:border-white/20`}
+                      >
+                        <span className="capitalize">{leagueForm.league}</span>
+                        <ChevronDown className={`w-4 h-4 text-white/30 transition-transform ${isLeagueDropdownOpen ? 'rotate-180' : ''}`} />
+                      </button>
+                      
+                      {isLeagueDropdownOpen && (
+                        <div className="absolute top-full left-0 right-0 mt-2 bg-brand-black border border-white/10 rounded-xl shadow-2xl z-50 overflow-hidden animate-in slide-in-from-top-2 duration-200">
+                          {['gold', 'silver', 'bronze'].map((league) => (
+                            <button
+                              key={league}
+                              onClick={() => {
+                                setLeagueForm({...leagueForm, league: league as any});
+                                setIsLeagueDropdownOpen(false);
+                              }}
+                              className={`w-full p-3 text-left text-sm font-bold capitalize transition-colors flex items-center justify-between ${leagueForm.league === league ? 'bg-brand-gold/10 text-brand-gold' : 'text-white/60 hover:bg-white/5 hover:text-white'}`}
+                            >
+                              {league}
+                              {leagueForm.league === league && <Check className="w-4 h-4" />}
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                    
+                    <div className="space-y-2 relative">
+                      <label className="text-[10px] font-black text-white/30 uppercase tracking-widest ml-1">Operator</label>
+                      <button 
+                        onClick={() => {
+                          setIsOperatorDropdownOpen(!isOperatorDropdownOpen);
+                          setIsLeagueDropdownOpen(false);
+                        }}
+                        className={`w-full p-4 bg-brand-dark border ${isOperatorDropdownOpen ? 'border-brand-gold ring-1 ring-brand-gold/50' : 'border-white/10'} rounded-xl text-sm font-bold text-white flex items-center justify-between transition-all hover:border-white/20`}
+                      >
+                        <span className={leagueForm.userId ? 'text-white' : 'text-white/30'}>
+                          {leagueForm.userId 
+                            ? operators.find(op => op.id === leagueForm.userId)?.firstName + ' ' + operators.find(op => op.id === leagueForm.userId)?.lastName 
+                            : 'Tanlang...'}
+                        </span>
+                        <ChevronDown className={`w-4 h-4 text-white/30 transition-transform ${isOperatorDropdownOpen ? 'rotate-180' : ''}`} />
+                      </button>
+
+                      {isOperatorDropdownOpen && (
+                        <div className="absolute top-full left-0 right-0 mt-2 bg-brand-black border border-white/10 rounded-xl shadow-2xl z-50 overflow-hidden animate-in slide-in-from-top-2 duration-200 max-h-60 overflow-y-auto custom-scrollbar">
+                          {operators.filter(op => !op.league).map(op => (
+                            <button
+                              key={op.id}
+                              onClick={() => {
+                                setLeagueForm(prev => ({ ...prev, userId: op.id }));
+                                setIsOperatorDropdownOpen(false);
+                              }}
+                              className={`w-full p-3 text-left text-sm font-bold transition-colors flex items-center justify-between ${leagueForm.userId === op.id ? 'bg-brand-gold/10 text-brand-gold' : 'text-white/60 hover:bg-white/5 hover:text-white'}`}
+                            >
+                              <span>{op.firstName} {op.lastName}</span>
+                              {leagueForm.userId === op.id && <Check className="w-4 h-4" />}
+                            </button>
+                          ))}
+                          {operators.filter(op => !op.league).length === 0 && (
+                            <div className="p-4 text-center text-white/30 text-xs italic">Barcha operatorlar allaqachon biriktirilgan</div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+
+                    <button
+                      onClick={() => {
+                        if (!leagueForm.userId) return alert("Operatorni tanlang");
+                        const user = operators.find(u => u.id === leagueForm.userId);
+                        if (user) {
+                          let history = user.leagueHistory || [];
+                          // If no history exists but user has a league, backfill it starting from creation date
+                          if (history.length === 0 && user.league) {
+                            history = [{ league: user.league, date: user.createdAt }];
+                          }
+                          const newHistory = [...history, { league: leagueForm.league, date: new Date().toISOString() }];
+                          // @ts-ignore
+                          updateUser(leagueForm.userId, { league: leagueForm.league, leagueHistory: newHistory });
+                        }
+                        setLeagueForm(prev => ({ ...prev, userId: '' }));
+                        setIsLeagueDropdownOpen(false);
+                        setIsOperatorDropdownOpen(false);
+                      }}
+                      className="w-full py-4 gold-gradient text-brand-black rounded-xl text-sm font-black uppercase tracking-widest hover:scale-[1.02] transition shadow-lg shadow-brand-gold/20 flex items-center justify-center gap-2"
+                    >
+                      <Plus className="w-4 h-4" /> Qo'shish
+                    </button>
+                  </div>
+
+                  {/* Lists */}
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-6 pt-8 border-t border-white/5">
+                    {['gold', 'silver', 'bronze'].map(league => {
+                      const leagueUsers = operators.filter(u => u.league === league);
+                      const color = league === 'gold' ? 'text-yellow-400' : league === 'silver' ? 'text-gray-300' : 'text-orange-500';
+                      const bg = league === 'gold' ? 'bg-yellow-400/5 border-yellow-400/10' : league === 'silver' ? 'bg-gray-300/5 border-gray-300/10' : 'bg-orange-500/5 border-orange-500/10';
+
+                      return (
+                        <div key={league} className={`rounded-2xl border ${bg} overflow-hidden flex flex-col`}>
+                          <div className="p-4 border-b border-white/5 flex items-center justify-between bg-brand-black/20">
+                            <span className={`text-xs font-black uppercase tracking-widest ${color}`}>{league}</span>
+                            <span className="text-[10px] font-bold text-white/30">{leagueUsers.length} ta</span>
+                          </div>
+                          <div className="p-2 space-y-2 max-h-[400px] overflow-y-auto custom-scrollbar">
+                            {leagueUsers.length === 0 ? (
+                              <div className="text-center py-8 text-white/20 text-[10px] font-bold uppercase tracking-widest italic">Bo'sh</div>
+                            ) : leagueUsers.map(u => (
+                              <div key={u.id} className="p-3 bg-brand-black rounded-xl border border-white/5 flex items-center justify-between group hover:border-white/10 transition-colors">
+                                <div className="flex items-center gap-3">
+                                  <div className="w-8 h-8 rounded-lg bg-white/5 flex items-center justify-center text-[10px] font-black text-white/40">
+                                    {u.firstName[0]}{u.lastName[0]}
+                                  </div>
+                                  <div>
+                                    <p className="text-xs font-bold text-white">{u.firstName} {u.lastName}</p>
+                                    <p className="text-[9px] text-white/30">{u.phone}</p>
+                                  </div>
+                                </div>
+                                <button 
+                                  onClick={() => {
+                                    let history = u.leagueHistory || [];
+                                    // If no history exists but user has a league, backfill it starting from creation date
+                                    if (history.length === 0 && u.league) {
+                                      history = [{ league: u.league, date: u.createdAt }];
+                                    }
+                                    const newHistory = [...history, { league: 'bronze' as const, date: new Date().toISOString() }];
+                                    // @ts-ignore
+                                    updateUser(u.id, { league: undefined, leagueHistory: newHistory });
+                                  }}
+                                  className="p-1.5 text-white/20 hover:text-red-500 hover:bg-red-500/10 rounded-lg transition-colors opacity-0 group-hover:opacity-100"
+                                  title="O'chirish"
+                                >
+                                  <X className="w-3 h-3" />
+                                </button>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {isWorkPointModalOpen && (
+        <div className="fixed inset-0 bg-brand-black/90 backdrop-blur-xl z-[100] flex items-center justify-center p-4 animate-in fade-in duration-300">
+          <div className="bg-brand-dark w-[95vw] h-[95vh] rounded-[3rem] border border-white/10 shadow-2xl overflow-hidden animate-in zoom-in-95 duration-300 flex flex-col">
+            <div className="p-8 border-b border-white/5 flex items-center justify-between bg-gradient-to-br from-brand-gold/10 to-transparent shrink-0">
+              <div>
+                <h3 className="text-xl font-black text-white uppercase tracking-tight">Ish nuqtasini kiritish</h3>
+                <p className="text-[10px] font-bold text-white/40 uppercase tracking-widest mt-1">Operator uchun xaritadan nuqta belgilang</p>
+              </div>
+              <button 
+                onClick={() => {
+                  setIsWorkPointModalOpen(false);
+                  setWorkPointForm({ userId: '', location: null, radius: 200 });
+                }}
+                className="p-3 bg-white/5 text-white/40 hover:text-white hover:bg-white/10 rounded-2xl transition-all"
+              >
+                <X className="w-6 h-6" />
+              </button>
+            </div>
+            
+            <div className="p-8 gap-6 overflow-y-auto custom-scrollbar flex-1 flex flex-col">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6 shrink-0">
+                <div className="space-y-2 relative">
+                  <label className="text-[10px] font-black text-white/30 uppercase tracking-widest ml-1">Operatorni tanlang</label>
+                  <button 
+                    onClick={() => setIsWorkPointOperatorDropdownOpen(!isWorkPointOperatorDropdownOpen)}
+                    className={`w-full p-4 bg-brand-black border ${isWorkPointOperatorDropdownOpen ? 'border-brand-gold ring-1 ring-brand-gold/50' : 'border-white/10'} rounded-2xl text-sm font-bold text-white flex items-center justify-between transition-all hover:border-white/20`}
+                  >
+                    <span className={workPointForm.userId ? 'text-white' : 'text-white/30'}>
+                      {workPointForm.userId 
+                        ? operators.find(op => op.id === workPointForm.userId)?.firstName + ' ' + operators.find(op => op.id === workPointForm.userId)?.lastName 
+                        : 'Operatorni tanlang...'}
+                    </span>
+                    <ChevronDown className={`w-4 h-4 text-white/30 transition-transform ${isWorkPointOperatorDropdownOpen ? 'rotate-180' : ''}`} />
+                  </button>
+
+                  {isWorkPointOperatorDropdownOpen && (
+                    <div className="absolute top-full left-0 right-0 mt-2 bg-brand-black border border-white/10 rounded-2xl shadow-2xl z-[110] overflow-hidden animate-in slide-in-from-top-2 duration-200 max-h-60 overflow-y-auto custom-scrollbar">
+                      {operators.map(op => (
+                        <button
+                          key={op.id}
+                          onClick={() => {
+                            setWorkPointForm({ 
+                              userId: op.id, 
+                              location: op.workLocation ? { lat: op.workLocation.lat, lng: op.workLocation.lng } : null,
+                              radius: op.workRadius || 200,
+                              workType: op.workType || 'office'
+                            });
+                            setIsWorkPointOperatorDropdownOpen(false);
+                          }}
+                          className={`w-full p-4 text-left text-sm font-bold transition-colors flex items-center justify-between ${workPointForm.userId === op.id ? 'bg-brand-gold/10 text-brand-gold' : 'text-white/60 hover:bg-white/5 hover:text-white'}`}
+                        >
+                          <div className="flex items-center gap-3">
+                            <div className="w-8 h-8 rounded-lg bg-white/5 flex items-center justify-center text-[10px] font-black text-white/40">
+                              {op.firstName[0]}{op.lastName[0]}
+                            </div>
+                            <span>{op.firstName} {op.lastName}</span>
+                          </div>
+                          {workPointForm.userId === op.id && <Check className="w-4 h-4" />}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                <div className="space-y-2">
+                  <label className="text-[10px] font-black text-white/30 uppercase tracking-widest ml-1">Radius (metr)</label>
+                  <input
+                    type="number"
+                    value={workPointForm.radius}
+                    onChange={(e) => setWorkPointForm(prev => ({ ...prev, radius: parseInt(e.target.value) || 0 }))}
+                    className="w-full p-4 bg-brand-black border border-white/10 rounded-2xl text-sm font-bold text-white focus:border-brand-gold focus:ring-1 focus:ring-brand-gold/50 transition-all outline-none"
+                    placeholder="Masalan: 200"
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <label className="text-[10px] font-black text-white/30 uppercase tracking-widest ml-1">Bo'limni tanlang</label>
+                  <select
+                    value={workPointForm.workType}
+                    onChange={(e) => setWorkPointForm(prev => ({ ...prev, workType: e.target.value as 'office' | 'mobile' | 'desk' }))}
+                    className="w-full p-4 bg-brand-black border border-white/10 rounded-2xl text-sm font-bold text-white focus:border-brand-gold focus:ring-1 focus:ring-brand-gold/50 transition-all outline-none appearance-none"
+                  >
+                    <option value="office">Ofis</option>
+                    <option value="mobile">Mobil ofis</option>
+                    <option value="desk">Stolda</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="space-y-2 flex-1 min-h-[400px] flex flex-col">
+                <label className="text-[10px] font-black text-white/30 uppercase tracking-widest ml-1">Xaritadan nuqtani belgilang</label>
+                <div className="flex-1 rounded-2xl overflow-hidden border border-white/10 relative">
+                  <MapPicker 
+                    lat={workPointForm.location?.lat || 0} 
+                    lng={workPointForm.location?.lng || 0} 
+                    onChange={(lat, lng) => setWorkPointForm(prev => ({ ...prev, location: { lat, lng } }))}
+                    className="absolute inset-0 h-full w-full m-0 rounded-none border-none"
+                    workType={workPointForm.workType}
+                    radius={workPointForm.radius}
+                  />
+                </div>
+                {workPointForm.location && (
+                  <p className="text-[10px] font-bold text-brand-gold uppercase tracking-widest mt-2">
+                    Tanlangan: {workPointForm.location.lat.toFixed(6)}, {workPointForm.location.lng.toFixed(6)}
+                  </p>
+                )}
+              </div>
+
+              <button
+                onClick={() => {
+                  if (!workPointForm.userId) return alert("Operatorni tanlang");
+                  if (!workPointForm.location) return alert("Xaritadan nuqtani belgilang");
+                  if (workPointForm.radius <= 0) return alert("Radius noldan katta bo'lishi kerak");
+                  
+                  updateUser(workPointForm.userId, { 
+                    workLocation: workPointForm.location,
+                    workRadius: workPointForm.radius,
+                    workType: workPointForm.workType
+                  });
+                  
+                  setIsWorkPointModalOpen(false);
+                  setWorkPointForm({ userId: '', location: null, radius: 200, workType: 'office' });
+                  alert("Ish nuqtasi muvaffaqiyatli saqlandi!");
+                }}
+                className="w-full py-5 gold-gradient text-brand-black rounded-[1.5rem] text-sm font-black uppercase tracking-widest hover:scale-[1.02] active:scale-95 transition shadow-xl shadow-brand-gold/20 flex items-center justify-center gap-2 shrink-0"
+              >
+                <CheckCircle className="w-5 h-5" /> Saqlash
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <style>{`
         .custom-scrollbar::-webkit-scrollbar { width: 5px; } 
         .custom-scrollbar::-webkit-scrollbar-thumb { background: #e2e8f0; border-radius: 10px; }

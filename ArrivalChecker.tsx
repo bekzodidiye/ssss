@@ -9,60 +9,55 @@ import RulesView from './components/RulesView';
 import { AppState, Role, User, CheckIn, SimSale, DailyReport, Message, MonthlyTarget } from './types';
 import { getTodayStr, isDateMatch } from './utils';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Crown, Sun, Moon, Globe, Hash } from 'lucide-react';
+import { Crown, Sun, Moon, Globe, Hash, RotateCcw, X } from 'lucide-react';
 import { t, Language } from './translations';
 
 const ArrivalChecker: React.FC = () => {
-  const [state, setState] = useState<AppState>({
-    currentUser: null,
-    users: [],
-    checkIns: [],
-    sales: [],
-    reports: [],
-    simInventory: { 'Ucell': 0, 'Mobiuz': 0, 'Beeline': 0, 'Uztelecom': 0 },
-    messages: [],
-    rules: [],
-    monthlyTargets: [],
-    tariffs: { 'Ucell': [], 'Mobiuz': [], 'Beeline': [], 'Uztelecom': [] }
+  const [state, setState] = useState<AppState>(() => {
+    const saved = localStorage.getItem('paynet_app_state');
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        return {
+          currentUser: parsed.currentUser || null,
+          users: parsed.users || [],
+          checkIns: parsed.checkIns || [],
+          sales: parsed.sales || [],
+          reports: parsed.reports || [],
+          simInventory: parsed.simInventory || { 'Ucell': 0, 'Mobiuz': 0, 'Beeline': 0, 'Uztelecom': 0 },
+          messages: parsed.messages || [],
+          rules: parsed.rules || [],
+          monthlyTargets: parsed.monthlyTargets || [],
+          tariffs: parsed.tariffs || { 'Ucell': [], 'Mobiuz': [], 'Beeline': [], 'Uztelecom': [] }
+        };
+      } catch (e) {
+        console.error("Failed to parse state", e);
+      }
+    }
+    return {
+      currentUser: null,
+      users: [],
+      checkIns: [],
+      sales: [],
+      reports: [],
+      simInventory: { 'Ucell': 0, 'Mobiuz': 0, 'Beeline': 0, 'Uztelecom': 0 },
+      messages: [],
+      rules: [],
+      monthlyTargets: [],
+      tariffs: { 'Ucell': [], 'Mobiuz': [], 'Beeline': [], 'Uztelecom': [] }
+    };
   });
 
-  const [isLoading, setIsLoading] = useState(true);
-
-  // Load state from DB on mount
-  useEffect(() => {
-    const fetchState = async () => {
-      try {
-        const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:5000';
-        const response = await fetch(`${apiUrl}/api/state`);
-        const data = await response.json();
-        if (data && Object.keys(data).length > 0) {
-          setState(data);
-        }
-      } catch (err) {
-        console.error('Failed to fetch state from DB, falling back to localStorage', err);
-        const saved = localStorage.getItem('paynet_app_state');
-        if (saved) {
-          try {
-            setState(JSON.parse(saved));
-          } catch (e) {
-            console.error("Failed to parse local state", e);
-          }
-        }
-      } finally {
-        setIsLoading(false);
-      }
-    };
-    fetchState();
-  }, []);
-
-  const [activeTab, setActiveTab] = useState<'overview' | 'users' | 'reports' | 'approvals' | 'messages' | 'rules' | 'simcards' | 'monitoring'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'users' | 'reports' | 'approvals' | 'messages' | 'rules' | 'simcards' | 'monitoring' | 'rating'>('overview');
   const [operatorTab, setOperatorTab] = useState('checkin');
   const [isDarkMode, setIsDarkMode] = useState(() => {
     const saved = localStorage.getItem('paynet_app_dark_mode');
     return saved === null ? true : saved === 'true';
   });
   const [isCalculatorOpen, setIsCalculatorOpen] = useState(false);
-
+  const [isAchievementModalOpen, setIsAchievementModalOpen] = useState(false);
+  const [achievementMonthInput, setAchievementMonthInput] = useState("");
+  
   const [language, setLanguage] = useState<Language>(() => {
     const saved = localStorage.getItem('paynet_app_language');
     return (saved as Language) || 'uz';
@@ -82,18 +77,214 @@ const ArrivalChecker: React.FC = () => {
   }, [isDarkMode]);
 
   useEffect(() => {
-    if (!isLoading) {
-      localStorage.setItem('paynet_app_state', JSON.stringify(state));
-      // Save to DB
-      const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:5000';
-      fetch(`${apiUrl}/api/state`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ data: state })
-      })
-        .catch(err => console.error('!!! Failed to save state to DB', err));
+    localStorage.setItem('paynet_app_state', JSON.stringify(state));
+  }, [state]);
+
+  // Automatic Achievement Awarding Logic
+  const calculateAchievements = (force = false) => {
+    console.log("calculateAchievements called, force:", force);
+    if (force) {
+      const today = new Date();
+      const prevMonthDate = new Date(today.getFullYear(), today.getMonth() - 1, 1);
+      const defaultMonth = `${prevMonthDate.getFullYear()}-${String(prevMonthDate.getMonth() + 1).padStart(2, '0')}`;
+      setAchievementMonthInput(defaultMonth);
+      setIsAchievementModalOpen(true);
+      return;
     }
-  }, [state, isLoading]);
+    
+    performAchievementCalculation();
+  };
+
+  const performAchievementCalculation = (manualMonth?: string) => {
+    try {
+      const today = new Date();
+      let targetMonthStr = "";
+      
+      if (manualMonth) {
+        targetMonthStr = manualMonth;
+      } else {
+        // Automatic mode: previous month
+        const prevMonthDate = new Date(today.getFullYear(), today.getMonth() - 1, 1);
+        targetMonthStr = `${prevMonthDate.getFullYear()}-${String(prevMonthDate.getMonth() + 1).padStart(2, '0')}`;
+      }
+
+      const currentMonthStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}`;
+      if (targetMonthStr >= currentMonthStr) {
+        if (manualMonth) {
+          alert("Siz faqat yakunlangan oylar uchun yutuqlarni hisoblashingiz mumkin. Joriy oy hali tugamagan.");
+        }
+        return;
+      }
+      
+      const processedMonths = state.processedMonthsForAchievements || [];
+
+      // If already processed for target month and not forced, skip
+      if (!manualMonth && processedMonths.includes(targetMonthStr)) {
+        return;
+      }
+
+      // Calculate achievements for target month
+      const targetMonthSales = state.sales.filter(s => s.date.startsWith(targetMonthStr));
+      
+      // Get the last day of the target month to determine historical league
+      const [year, month] = targetMonthStr.split('-').map(Number);
+      const lastDayOfTargetMonth = new Date(year, month, 0);
+      lastDayOfTargetMonth.setHours(23, 59, 59, 999);
+
+      if (manualMonth) {
+        console.log(`Recalculating for ${targetMonthStr}. Found ${targetMonthSales.length} sales.`);
+      }
+
+      // Group users by their league at the end of the target month
+      const leagueUsers: Record<'gold' | 'silver' | 'bronze', any[]> = {
+        gold: [],
+        silver: [],
+        bronze: []
+      };
+
+      state.users.filter(u => u.role !== 'manager').forEach(u => {
+        let historicalLeague: 'gold' | 'silver' | 'bronze' = u.league || 'bronze';
+        if (u.leagueHistory && u.leagueHistory.length > 0) {
+          const sorted = [...u.leagueHistory].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+          const match = sorted.find(h => new Date(h.date) <= lastDayOfTargetMonth);
+          if (match) {
+            historicalLeague = match.league;
+          } else {
+            historicalLeague = 'bronze';
+          }
+        }
+        leagueUsers[historicalLeague].push(u);
+      });
+
+      const newAchievements: { userId: string, achievement: any }[] = [];
+
+      // Process each league
+      (['gold', 'silver', 'bronze'] as const).forEach(league => {
+        const usersInLeague = leagueUsers[league];
+        if (usersInLeague.length === 0) return;
+
+        // Calculate total sales for each user in this league for target month
+        const userSales = usersInLeague.map(user => {
+          const total = targetMonthSales
+            .filter(s => s.userId === user.id)
+            .reduce((sum, s) => sum + s.count + s.bonus, 0);
+          return { user, total };
+        });
+
+        // Sort by sales descending
+        userSales.sort((a, b) => b.total - a.total);
+
+        // Award top 3
+        userSales.slice(0, 3).forEach((item, index) => {
+          // Award achievement to top 3 users in each league
+          // We award even if total is 0 if there are users in the league, 
+          // to satisfy the requirement of having 3 places per league.
+          newAchievements.push({
+            userId: item.user.id,
+            achievement: {
+              id: Math.random().toString(36).substr(2, 9),
+              type: league, // Use league name as type to ensure correct color (Silver league -> Silver color)
+              title: `${targetMonthStr} ${league.charAt(0).toUpperCase() + league.slice(1)} Ligasida ${index + 1}-o'rin`,
+              reason: `${targetMonthStr} oyida ${item.total} ta simkarta sotib, ${league} ligasida ${index + 1}-o'rinni egalladi.`,
+              date: new Date().toLocaleDateString('uz-UZ')
+            }
+          });
+        });
+      });
+
+      if (newAchievements.length > 0) {
+        setState(prev => {
+          // Avoid adding duplicate achievements if running multiple times
+          // We filter out achievements that look identical (same title and date)
+          const updatedUsers = prev.users.map(u => {
+            const userNewAchievements = newAchievements
+              .filter(na => na.userId === u.id)
+              .map(na => na.achievement);
+            
+            if (userNewAchievements.length > 0) {
+              // Filter out duplicates
+              const existingTitles = new Set((u.achievements || []).map(a => a.title));
+              const uniqueNewAchievements = userNewAchievements.filter(a => !existingTitles.has(a.title));
+              
+              if (uniqueNewAchievements.length === 0) return u;
+
+              return {
+                ...u,
+                achievements: [...(u.achievements || []), ...uniqueNewAchievements]
+              };
+            }
+            return u;
+          });
+
+          // Also update current user if they received an achievement
+          let updatedCurrentUser = prev.currentUser;
+          if (updatedCurrentUser) {
+            const u = updatedUsers.find(u => u.id === updatedCurrentUser!.id);
+            if (u) {
+              updatedCurrentUser = u;
+            }
+          }
+
+          return {
+            ...prev,
+            users: updatedUsers,
+            currentUser: updatedCurrentUser,
+            processedMonthsForAchievements: manualMonth ? processedMonths : [...processedMonths, targetMonthStr]
+          };
+        });
+        if (manualMonth) alert(`Yutuqlar muvaffaqiyatli hisoblandi! ${newAchievements.length} ta yutuq berildi.`);
+      } else {
+        // Even if no achievements were awarded (e.g. no sales), mark as processed so we don't keep checking
+        if (!manualMonth) {
+          setState(prev => ({
+            ...prev,
+            processedMonthsForAchievements: [...processedMonths, targetMonthStr]
+          }));
+        } else {
+          alert(`${targetMonthStr} oyi uchun yetarli savdo ma'lumotlari topilmadi yoki hech kim savdo qilmagan.`);
+        }
+      }
+    } catch (error) {
+      console.error("Error calculating achievements:", error);
+      if (manualMonth) alert("Xatolik yuz berdi: " + (error as any).message);
+    }
+  };
+
+  useEffect(() => {
+    calculateAchievements();
+    
+    // Cleanup: Remove any achievements wrongly awarded for the current month (e.g. 2026-03)
+    const today = new Date();
+    const currentMonthStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}`;
+    
+    setState(prev => {
+      let hasChanges = false;
+      const updatedUsers = prev.users.map(u => {
+        if (u.achievements && u.achievements.length > 0) {
+          const filtered = u.achievements.filter(a => !a.title.startsWith(currentMonthStr));
+          if (filtered.length !== u.achievements.length) {
+            hasChanges = true;
+            return { ...u, achievements: filtered };
+          }
+        }
+        return u;
+      });
+
+      if (!hasChanges) return prev;
+
+      let updatedCurrentUser = prev.currentUser;
+      if (updatedCurrentUser) {
+        const u = updatedUsers.find(u => u.id === updatedCurrentUser!.id);
+        if (u) updatedCurrentUser = u;
+      }
+
+      return {
+        ...prev,
+        users: updatedUsers,
+        currentUser: updatedCurrentUser
+      };
+    });
+  }, []); // Run once on mount
 
   useEffect(() => {
     const handleStorageChange = (e: StorageEvent) => {
@@ -120,14 +311,6 @@ const ArrivalChecker: React.FC = () => {
   const handleLogout = () => {
     setState(prev => ({ ...prev, currentUser: null }));
   };
-
-  if (isLoading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-brand-black p-4">
-        <div className="w-12 h-12 border-4 border-brand-gold border-t-transparent rounded-full animate-spin"></div>
-      </div>
-    );
-  }
 
   if (!state.currentUser) {
     return <Auth state={state} setState={setState} language={language} setLanguage={setLanguage} />;
@@ -156,8 +339,8 @@ const ArrivalChecker: React.FC = () => {
               <div className="relative w-12 h-12 bg-brand-black border border-brand-gold/50 rounded-xl flex flex-col items-center justify-center text-brand-gold font-black shadow-2xl overflow-hidden">
                 <Crown className="w-6 h-6 mb-0.5" />
                 <div className="flex gap-0.5 mt-0.5">
-                  <div className="w-1.5 h-1 bg-brand-gold/40 rounded-full"></div>
-                  <div className="w-1.5 h-1 bg-brand-gold/40 rounded-full"></div>
+                   <div className="w-1.5 h-1 bg-brand-gold/40 rounded-full"></div>
+                   <div className="w-1.5 h-1 bg-brand-gold/40 rounded-full"></div>
                 </div>
               </div>
             </div>
@@ -170,7 +353,7 @@ const ArrivalChecker: React.FC = () => {
 
         <div className="p-4 border-b border-white/10">
           <div className="flex items-center justify-between bg-white/5 p-1.5 rounded-xl border border-white/10">
-            <button
+            <button 
               onClick={() => setIsCalculatorOpen(!isCalculatorOpen)}
               className={`flex-1 p-2 flex justify-center transition-all rounded-lg ${isCalculatorOpen ? 'text-brand-gold bg-brand-gold/10 border border-brand-gold/30 shadow-lg shadow-brand-gold/10' : 'text-white/40 hover:text-brand-gold hover:bg-white/5 border border-transparent'}`}
               title={t(language, 'calculator')}
@@ -178,7 +361,7 @@ const ArrivalChecker: React.FC = () => {
               <Hash className="w-4 h-4" />
             </button>
             <div className="w-px h-4 bg-white/10"></div>
-            <button
+            <button 
               onClick={() => setIsDarkMode(!isDarkMode)}
               className="flex-1 p-2 flex justify-center text-white/40 hover:text-brand-gold transition-colors rounded-lg hover:bg-white/5"
               title={isDarkMode ? t(language, 'day_mode') : t(language, 'night_mode')}
@@ -206,6 +389,7 @@ const ArrivalChecker: React.FC = () => {
               { id: 'overview', label: t(language, 'overview'), icon: '📊' },
               { id: 'users', label: t(language, 'employees'), icon: '👥' },
               { id: 'monitoring', label: t(language, 'monitoring'), icon: '📈' },
+              { id: 'rating', label: t(language, 'rating'), icon: '🏆' },
               { id: 'reports', label: t(language, 'reports'), icon: '📝' },
               { id: 'simcards', label: t(language, 'inventory_plan'), icon: '📱' },
               { id: 'messages', label: t(language, 'messages'), icon: '💬' },
@@ -218,10 +402,11 @@ const ArrivalChecker: React.FC = () => {
                   setActiveTab(tab.id as any);
                   window.scrollTo({ top: 0, behavior: 'smooth' });
                 }}
-                className={`w-full flex items-center justify-between px-4 py-3.5 rounded-xl text-xs font-black transition-all uppercase tracking-wider ${activeTab === tab.id
-                  ? 'bg-brand-gold text-brand-black shadow-lg shadow-brand-gold/20'
-                  : 'bg-white/5 text-white/60 hover:bg-white/10 border border-white/5'
-                  }`}
+                className={`w-full flex items-center justify-between px-4 py-3.5 rounded-xl text-xs font-black transition-all uppercase tracking-wider ${
+                  activeTab === tab.id 
+                    ? 'bg-brand-gold text-brand-black shadow-lg shadow-brand-gold/20' 
+                    : 'bg-white/5 text-white/60 hover:bg-white/10 border border-white/5'
+                }`}
               >
                 <div className="flex items-center gap-3">
                   <span className="text-lg">{tab.icon}</span>
@@ -248,10 +433,11 @@ const ArrivalChecker: React.FC = () => {
                   setOperatorTab(tab.id);
                   window.scrollTo({ top: 0, behavior: 'smooth' });
                 }}
-                className={`w-full flex items-center gap-3 px-4 py-3.5 rounded-xl text-xs font-black transition-all uppercase tracking-wider ${operatorTab === tab.id
-                  ? 'bg-brand-gold text-brand-black shadow-lg shadow-brand-gold/20'
-                  : 'bg-white/5 text-white/60 hover:bg-white/10 border border-white/5'
-                  }`}
+                className={`w-full flex items-center gap-3 px-4 py-3.5 rounded-xl text-xs font-black transition-all uppercase tracking-wider ${
+                  operatorTab === tab.id 
+                    ? 'bg-brand-gold text-brand-black shadow-lg shadow-brand-gold/20' 
+                    : 'bg-white/5 text-white/60 hover:bg-white/10 border border-white/5'
+                }`}
               >
                 <span className="text-lg">{tab.icon}</span>
                 <span>{tab.label}</span>
@@ -271,12 +457,12 @@ const ArrivalChecker: React.FC = () => {
                 <p className="text-[9px] text-brand-gold font-black uppercase tracking-widest">{state.currentUser.role.replace('_', ' ')}</p>
               </div>
             </div>
-            <button
+            <button 
               onClick={handleLogout}
               className="p-2 text-white/40 hover:text-red-500 transition-all rounded-xl hover:bg-red-500/10 border border-transparent hover:border-red-500/20"
               title={t(language, 'logout')}
             >
-              <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" /><polyline points="16 17 21 12 16 7" /><line x1="21" x2="9" y1="12" y2="12" /></svg>
+              <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" x2="9" y1="12" y2="12"/></svg>
             </button>
           </div>
         </div>
@@ -287,9 +473,11 @@ const ArrivalChecker: React.FC = () => {
           <>
             {/* Manager Navigation removed from here */}
 
-            <ManagerPanel
+            <ManagerPanel 
               state={state}
               isDarkMode={isDarkMode}
+              language={language}
+              calculateAchievements={calculateAchievements}
               approveUser={(userId) => setState(prev => ({ ...prev, users: prev.users.map(u => u.id === userId ? { ...u, isApproved: true } : u) }))}
               updateUser={(userId, updates) => setState(prev => {
                 // If workingHours is being updated, handle check-ins
@@ -301,7 +489,7 @@ const ArrivalChecker: React.FC = () => {
                     newCheckIns = prev.checkIns.map(ci => {
                       if (ci.userId === userId) {
                         const isToday = ci.date === today || isDateMatch(ci.timestamp, today);
-
+                        
                         if (isToday) {
                           // For today, ALWAYS update to the NEW working hours
                           return { ...ci, workingHours: updates.workingHours };
@@ -314,7 +502,7 @@ const ArrivalChecker: React.FC = () => {
                     });
                   }
                 }
-
+                
                 return {
                   ...prev,
                   users: prev.users.map(u => u.id === userId ? { ...u, ...updates } : u),
@@ -358,7 +546,6 @@ const ArrivalChecker: React.FC = () => {
                   }
                 };
               })}
-              language={language}
             />
             {activeTab === 'rules' && (
               <RulesPanel state={state} setState={setState} language={language} />
@@ -366,144 +553,144 @@ const ArrivalChecker: React.FC = () => {
           </>
         ) : (
           <>
-            {/* Operator Navigation removed from here */}
+             {/* Operator Navigation removed from here */}
 
             {operatorTab === 'rules' ? (
               <RulesView state={state} language={language} />
             ) : (
-              <OperatorPanel
+              <OperatorPanel 
                 user={state.currentUser}
                 state={state}
-                addCheckIn={(checkIn) => setState(prev => ({ ...prev, checkIns: [...prev.checkIns, checkIn] }))}
-                updateCheckIn={(userId, date, updates) => setState(prev => ({ ...prev, checkIns: prev.checkIns.map(c => c.userId === userId && c.timestamp.startsWith(date) ? { ...c, ...updates } : c) }))}
-                updateReport={(userId, date, updates) => setState(prev => ({ ...prev, reports: prev.reports.map(r => r.userId === userId && r.date === date ? { ...r, ...updates } : r) }))}
-                updateUser={(userId, updates) => setState(prev => {
-                  // If workingHours is being updated, handle check-ins
-                  let newCheckIns = prev.checkIns;
-                  if (updates.workingHours) {
-                    const user = prev.users.find(u => u.id === userId);
-                    if (user) {
-                      const today = getTodayStr();
-                      newCheckIns = prev.checkIns.map(ci => {
-                        if (ci.userId === userId) {
-                          const isToday = ci.date === today || isDateMatch(ci.timestamp, today);
-
-                          if (isToday) {
-                            // For today, ALWAYS update to the NEW working hours
-                            return { ...ci, workingHours: updates.workingHours };
-                          } else if (!ci.workingHours && user.workingHours) {
-                            // For past days, if missing, backfill with OLD working hours to preserve history
-                            return { ...ci, workingHours: user.workingHours };
-                          }
+              addCheckIn={(checkIn) => setState(prev => ({ ...prev, checkIns: [...prev.checkIns, checkIn] }))}
+              updateCheckIn={(userId, date, updates) => setState(prev => ({ ...prev, checkIns: prev.checkIns.map(c => c.userId === userId && c.timestamp.startsWith(date) ? { ...c, ...updates } : c) }))}
+              updateReport={(userId, date, updates) => setState(prev => ({ ...prev, reports: prev.reports.map(r => r.userId === userId && r.date === date ? { ...r, ...updates } : r) }))}
+              updateUser={(userId, updates) => setState(prev => {
+                // If workingHours is being updated, handle check-ins
+                let newCheckIns = prev.checkIns;
+                if (updates.workingHours) {
+                  const user = prev.users.find(u => u.id === userId);
+                  if (user) {
+                    const today = getTodayStr();
+                    newCheckIns = prev.checkIns.map(ci => {
+                      if (ci.userId === userId) {
+                        const isToday = ci.date === today || isDateMatch(ci.timestamp, today);
+                        
+                        if (isToday) {
+                          // For today, ALWAYS update to the NEW working hours
+                          return { ...ci, workingHours: updates.workingHours };
+                        } else if (!ci.workingHours && user.workingHours) {
+                          // For past days, if missing, backfill with OLD working hours to preserve history
+                          return { ...ci, workingHours: user.workingHours };
                         }
-                        return ci;
-                      });
+                      }
+                      return ci;
+                    });
+                  }
+                }
+                
+                return {
+                  ...prev,
+                  users: prev.users.map(u => u.id === userId ? { ...u, ...updates } : u),
+                  checkIns: newCheckIns
+                };
+              })}
+              addSale={(sale) => setState(prev => {
+                // Deduct from inventory
+                const user = prev.users.find(u => u.id === sale.userId);
+                if (user && user.inventory) {
+                  const newInventory = { ...user.inventory };
+                  if (newInventory[sale.company] >= (sale.count + sale.bonus)) {
+                    newInventory[sale.company] -= (sale.count + sale.bonus);
+                    // Update user inventory and add sale
+                    const updatedUsers = prev.users.map(u => u.id === user.id ? { ...u, inventory: newInventory } : u);
+                    return {
+                      ...prev,
+                      users: updatedUsers,
+                      currentUser: prev.currentUser && prev.currentUser.id === user.id ? { ...prev.currentUser, inventory: newInventory } : prev.currentUser,
+                      sales: [...prev.sales, sale]
+                    };
+                  }
+                }
+                return prev; // Should be handled in UI validation, but safety check here
+              })}
+              removeSale={(saleId) => setState(prev => {
+                const sale = prev.sales.find(s => s.id === saleId);
+                if (sale) {
+                  // Restore inventory
+                  const user = prev.users.find(u => u.id === sale.userId);
+                  let updatedUsers = prev.users;
+                  let updatedCurrentUser = prev.currentUser;
+
+                  if (user && user.inventory) {
+                    const newInventory = { ...user.inventory };
+                    newInventory[sale.company] = (newInventory[sale.company] || 0) + (sale.count + sale.bonus);
+                    updatedUsers = prev.users.map(u => u.id === user.id ? { ...u, inventory: newInventory } : u);
+                    if (prev.currentUser && prev.currentUser.id === user.id) {
+                      updatedCurrentUser = { ...prev.currentUser, inventory: newInventory };
                     }
                   }
 
                   return {
                     ...prev,
-                    users: prev.users.map(u => u.id === userId ? { ...u, ...updates } : u),
-                    checkIns: newCheckIns
+                    users: updatedUsers,
+                    currentUser: updatedCurrentUser,
+                    sales: prev.sales.filter(s => s.id !== saleId)
                   };
-                })}
-                addSale={(sale) => setState(prev => {
-                  // Deduct from inventory
-                  const user = prev.users.find(u => u.id === sale.userId);
+                }
+                return prev;
+              })}
+              updateSale={(saleId, updates) => setState(prev => {
+                const oldSale = prev.sales.find(s => s.id === saleId);
+                if (oldSale) {
+                  // Complex inventory logic needed here if count changes, simplified for now:
+                  // 1. Revert old sale from inventory
+                  // 2. Apply new sale to inventory
+                  // This is better handled by removing and re-adding or careful diffing.
+                  // For this demo, we'll assume the UI handles validation and we just update state.
+                  // In a real app, this needs transaction-like safety.
+                  
+                  // Let's do a simple inventory adjustment if count/bonus changes
+                  const user = prev.users.find(u => u.id === oldSale.userId);
                   if (user && user.inventory) {
                     const newInventory = { ...user.inventory };
-                    if (newInventory[sale.company] >= (sale.count + sale.bonus)) {
-                      newInventory[sale.company] -= (sale.count + sale.bonus);
-                      // Update user inventory and add sale
-                      const updatedUsers = prev.users.map(u => u.id === user.id ? { ...u, inventory: newInventory } : u);
+                    // Revert old
+                    newInventory[oldSale.company] = (newInventory[oldSale.company] || 0) + (oldSale.count + oldSale.bonus);
+                    
+                    const newCount = updates.count !== undefined ? updates.count : oldSale.count;
+                    const newBonus = updates.bonus !== undefined ? updates.bonus : oldSale.bonus;
+                    const newCompany = updates.company || oldSale.company;
+
+                    // Apply new
+                    if (newInventory[newCompany] >= (newCount + newBonus)) {
+                      newInventory[newCompany] -= (newCount + newBonus);
                       return {
                         ...prev,
-                        users: updatedUsers,
-                        currentUser: prev.currentUser && prev.currentUser.id === user.id ? { ...prev.currentUser, inventory: newInventory } : prev.currentUser,
-                        sales: [...prev.sales, sale]
+                        users: prev.users.map(u => u.id === user.id ? { ...u, inventory: newInventory } : u),
+                        sales: prev.sales.map(s => s.id === saleId ? { ...s, ...updates } : s)
                       };
                     }
                   }
-                  return prev; // Should be handled in UI validation, but safety check here
-                })}
-                removeSale={(saleId) => setState(prev => {
-                  const sale = prev.sales.find(s => s.id === saleId);
-                  if (sale) {
-                    // Restore inventory
-                    const user = prev.users.find(u => u.id === sale.userId);
-                    let updatedUsers = prev.users;
-                    let updatedCurrentUser = prev.currentUser;
-
-                    if (user && user.inventory) {
-                      const newInventory = { ...user.inventory };
-                      newInventory[sale.company] = (newInventory[sale.company] || 0) + (sale.count + sale.bonus);
-                      updatedUsers = prev.users.map(u => u.id === user.id ? { ...u, inventory: newInventory } : u);
-                      if (prev.currentUser && prev.currentUser.id === user.id) {
-                        updatedCurrentUser = { ...prev.currentUser, inventory: newInventory };
-                      }
-                    }
-
-                    return {
-                      ...prev,
-                      users: updatedUsers,
-                      currentUser: updatedCurrentUser,
-                      sales: prev.sales.filter(s => s.id !== saleId)
-                    };
-                  }
-                  return prev;
-                })}
-                updateSale={(saleId, updates) => setState(prev => {
-                  const oldSale = prev.sales.find(s => s.id === saleId);
-                  if (oldSale) {
-                    // Complex inventory logic needed here if count changes, simplified for now:
-                    // 1. Revert old sale from inventory
-                    // 2. Apply new sale to inventory
-                    // This is better handled by removing and re-adding or careful diffing.
-                    // For this demo, we'll assume the UI handles validation and we just update state.
-                    // In a real app, this needs transaction-like safety.
-
-                    // Let's do a simple inventory adjustment if count/bonus changes
-                    const user = prev.users.find(u => u.id === oldSale.userId);
-                    if (user && user.inventory) {
-                      const newInventory = { ...user.inventory };
-                      // Revert old
-                      newInventory[oldSale.company] = (newInventory[oldSale.company] || 0) + (oldSale.count + oldSale.bonus);
-
-                      const newCount = updates.count !== undefined ? updates.count : oldSale.count;
-                      const newBonus = updates.bonus !== undefined ? updates.bonus : oldSale.bonus;
-                      const newCompany = updates.company || oldSale.company;
-
-                      // Apply new
-                      if (newInventory[newCompany] >= (newCount + newBonus)) {
-                        newInventory[newCompany] -= (newCount + newBonus);
-                        return {
-                          ...prev,
-                          users: prev.users.map(u => u.id === user.id ? { ...u, inventory: newInventory } : u),
-                          sales: prev.sales.map(s => s.id === saleId ? { ...s, ...updates } : s)
-                        };
-                      }
-                    }
-                  }
-                  return prev;
-                })}
-                addReport={(report) => setState(prev => ({ ...prev, reports: [...prev.reports, report] }))}
-                addSimInventory={(company, count) => setState(prev => {
-                  const user = prev.users.find(u => u.id === state.currentUser!.id);
-                  if (user) {
-                    const newInventory = { ...(user.inventory || {}) };
-                    newInventory[company] = (newInventory[company] || 0) + count;
-                    return {
-                      ...prev,
-                      users: prev.users.map(u => u.id === user.id ? { ...u, inventory: newInventory } : u)
-                    };
-                  }
-                  return prev;
-                })}
-                addMessage={(text) => setState(prev => ({ ...prev, messages: [...prev.messages, { id: Date.now().toString(), senderId: state.currentUser!.id, senderName: `${state.currentUser!.firstName} ${state.currentUser!.lastName}`, recipientId: 'manager', text, timestamp: new Date().toISOString(), isRead: false }] }))}
-                markMessageAsRead={(msgId) => setState(prev => ({ ...prev, messages: prev.messages.map(m => m.id === msgId ? { ...m, isRead: true } : m) }))}
-                activeTab={operatorTab}
-                language={language}
-              />
+                }
+                return prev;
+              })}
+              addReport={(report) => setState(prev => ({ ...prev, reports: [...prev.reports, report] }))}
+              addSimInventory={(company, count) => setState(prev => {
+                const user = prev.users.find(u => u.id === state.currentUser!.id);
+                if (user) {
+                  const newInventory = { ...(user.inventory || {}) };
+                  newInventory[company] = (newInventory[company] || 0) + count;
+                  return {
+                    ...prev,
+                    users: prev.users.map(u => u.id === user.id ? { ...u, inventory: newInventory } : u)
+                  };
+                }
+                return prev;
+              })}
+              addMessage={(text) => setState(prev => ({ ...prev, messages: [...prev.messages, { id: Date.now().toString(), senderId: state.currentUser!.id, senderName: `${state.currentUser!.firstName} ${state.currentUser!.lastName}`, recipientId: 'manager', text, timestamp: new Date().toISOString(), isRead: false }] }))}
+              markMessageAsRead={(msgId) => setState(prev => ({ ...prev, messages: prev.messages.map(m => m.id === msgId ? { ...m, isRead: true } : m) }))}
+              activeTab={operatorTab}
+              language={language}
+            />
             )}
           </>
         )}
@@ -511,7 +698,72 @@ const ArrivalChecker: React.FC = () => {
 
       <AnimatePresence>
         {isCalculatorOpen && (
-          <Calculator onClose={() => setIsCalculatorOpen(false)} language={language} />
+          <Calculator onClose={() => setIsCalculatorOpen(false)} language={language} isDarkMode={isDarkMode} />
+        )}
+        
+        {isAchievementModalOpen && (
+          <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-brand-black/80 backdrop-blur-sm">
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.95, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 20 }}
+              className="bg-brand-dark w-full max-w-md rounded-[2.5rem] border border-white/10 shadow-2xl overflow-hidden"
+            >
+              <div className="p-8 space-y-6">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-xl bg-green-500/10 flex items-center justify-center text-green-500">
+                      <RotateCcw className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <h3 className="text-lg font-black text-white uppercase tracking-tight">Qayta hisoblash</h3>
+                      <p className="text-[10px] text-white/40 font-bold uppercase tracking-widest">Yutuqlarni qayta tekshirish</p>
+                    </div>
+                  </div>
+                  <button onClick={() => setIsAchievementModalOpen(false)} className="p-2 hover:bg-white/5 rounded-xl transition-colors text-white/20 hover:text-white">
+                    <X className="w-5 h-5" />
+                  </button>
+                </div>
+
+                <div className="space-y-4">
+                  <p className="text-sm text-white/60 leading-relaxed">
+                    Qaysi oy uchun yutuqlarni hisoblamoqchisiz? Format: YYYY-MM (masalan: 2026-02)
+                  </p>
+                  <div className="relative">
+                    <input 
+                      type="text" 
+                      placeholder="YYYY-MM"
+                      value={achievementMonthInput}
+                      onChange={(e) => setAchievementMonthInput(e.target.value)}
+                      className="w-full bg-brand-black border border-white/10 rounded-2xl px-6 py-4 text-white font-bold focus:border-brand-gold outline-none transition-all"
+                    />
+                  </div>
+                </div>
+
+                <div className="flex gap-3 pt-2">
+                  <button 
+                    onClick={() => setIsAchievementModalOpen(false)}
+                    className="flex-1 py-4 bg-white/5 hover:bg-white/10 text-white/60 font-black uppercase tracking-widest text-[10px] rounded-2xl transition-all border border-white/10"
+                  >
+                    Bekor qilish
+                  </button>
+                  <button 
+                    onClick={() => {
+                      if (!/^\d{4}-\d{2}$/.test(achievementMonthInput)) {
+                        alert("Noto'g'ri format! YYYY-MM ko'rinishida kiriting.");
+                        return;
+                      }
+                      performAchievementCalculation(achievementMonthInput);
+                      setIsAchievementModalOpen(false);
+                    }}
+                    className="flex-1 py-4 bg-green-500 text-brand-black font-black uppercase tracking-widest text-[10px] rounded-2xl transition-all shadow-lg shadow-green-500/20 hover:scale-[1.02] active:scale-95"
+                  >
+                    Hisoblash
+                  </button>
+                </div>
+              </div>
+            </motion.div>
+          </div>
         )}
       </AnimatePresence>
     </div>
